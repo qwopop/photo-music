@@ -67,7 +67,8 @@ npx vitest run lib/greeting.test.ts
 `image` field. JPEG, PNG and WebP are detected from their contents; filenames
 and declared MIME types are ignored. The server fully decodes the image with
 sharp, rejecting corrupt/truncated data and images above **25,000,000 decoded
-pixels** (including all frames of animated images).
+pixels** (including all WebP animation frames). PNG/APNG uses the decoder's
+default image; additional APNG frames have the limitation documented below.
 
 The inclusive file limit is **10 MiB (10,485,760 bytes)**. The entire multipart
 request, including boundaries and headers, is limited to **10 MiB + 64 KiB
@@ -136,6 +137,77 @@ curl --silent --show-error --include \
 
 Do not paste a live upload handle into public logs or issue comments. Release
 it through the server-only API after processing, or let its ten-minute TTL expire.
+
+## Dominant photo palette
+
+Server-side analysis and result-page theming share this contract from
+`lib/palette` (a server-only module):
+
+```ts
+import { extractPalette, type PaletteResult } from "@/lib/palette";
+
+// extractPalette(bytes: Buffer): Promise<PaletteResult>
+// PaletteResult = { colors: string[]; brightness: number }
+const palette = await extractPalette(photoBytes);
+```
+
+For a lossless photo with three red pixels and one blue pixel, the result is:
+
+```json
+{
+  "colors": ["#ff0000", "#0000ff", "#0000ff", "#0000ff", "#0000ff", "#0000ff"],
+  "brightness": 0.1775
+}
+```
+
+`colors` always contains six lowercase `#rrggbb` slots. The deterministic
+algorithm decodes JPEG, PNG or WebP, converts pixels to sRGB, and samples at
+most **256×256 (65,536) pixels** with nearest-neighbor resizing inside that box,
+preserving aspect ratio and never enlarging an image. It groups nearby shades
+into **5-bit-per-channel RGB buckets** (at most 32,768 buckets). Each bucket's
+representative is its rounded alpha-weighted mean RGB, ordered by decreasing
+alpha weight; ties use ascending hex color value. The six most prevalent
+representatives are returned. With fewer than six, the least-prevalent returned
+color repeats to fill the remaining slots while preserving order. Solid images
+repeat their actual color; no white, black or other filler color is invented.
+Sampling can omit very small regions in a large image, and colors are visual
+representatives rather than mood interpretations or accessibility guarantees.
+
+`brightness` is finite and in **[0, 1]**. It measures all sampled visible pixels,
+independently of the palette's six entries, using the mean normalized sRGB
+weighted brightness:
+
+```text
+per-pixel brightness = (0.2126 * R + 0.7152 * G + 0.0722 * B) / 255
+result = sum(alpha * per-pixel brightness) / sum(alpha)
+```
+
+Fully transparent pixels contribute no color or brightness; partially
+transparent pixels contribute proportionally to alpha. A black image yields 0,
+a white image 1, and equal black/white regions approximately 0.5. An image with
+no visible sampled pixels rejects with `PaletteError.code = "NO_VISIBLE_PIXELS"`
+and the fixed message `The image has no visible pixels.`
+
+Animated **WebP uses its first visual frame** for the palette, while upload
+validation still decodes all WebP frames and checks their aggregate pixel
+count. PNG, including APNG, uses **the decoder's default IDAT image**. The
+current sharp/libvips stack does not expose APNG animation frames, so that
+default image may differ from the first animation frame; later APNG frame
+integrity and aggregate animation pixels are not validated here. The APNG
+policy/validation follow-up is [#37](https://github.com/qwopop/photo-music/issues/37).
+
+Direct extraction reuses the upload validator's **10 MiB file limit** and
+**25,000,000 decoded-pixel limit** before sampling. Empty, unsupported,
+malformed, corrupt or truncated decoded content rejects with the fixed safe
+`INVALID_IMAGE` error; an oversized file uses `FILE_TOO_LARGE`. `PaletteError`
+exposes only a stable code and fixed user-facing message, with no decoder
+details or photo logging. Original bytes are never mutated, cached or written
+to disk; extraction requires no database, network service or API key.
+
+The later analysis API (#12) will call this function using a consumed private
+upload buffer, and the results page (#13) will receive the shared
+`PaletteResult`, including repeated color slots. This issue adds no HTTP route
+or page styling.
 
 ## Configuration
 
