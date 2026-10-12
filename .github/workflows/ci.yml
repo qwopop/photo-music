@@ -28,6 +28,25 @@ jobs:
 
       # Each check runs even if an earlier check failed, so one run reports
       # every problem. None of them run if the install failed.
+
+      # Fails when lib/db/schema.ts changed without a committed migration.
+      # `git status` also sees new, untracked files, which `git diff` misses.
+      # drizzle-kit asks about renamed columns. With no terminal it prints an
+      # error and exits 0 instead, so the step also fails when drizzle-kit
+      # does not report that there is nothing to migrate. The timeout keeps a
+      # prompt from holding the job.
+      - name: Migrations match the schema
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        timeout-minutes: 5
+        run: |
+          npm run db:generate 2>&1 | tee "$RUNNER_TEMP/db-generate.log"
+          changes="$(git status --porcelain -- lib/db/migrations)"
+          if [ -n "$changes" ] || ! grep -q "No schema changes" "$RUNNER_TEMP/db-generate.log"; then
+            echo "$changes"
+            echo "::error::lib/db/migrations does not match lib/db/schema.ts. Run npm run db:generate and commit the result."
+            exit 1
+          fi
+
       - name: Lint
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run lint
@@ -69,10 +88,20 @@ jobs:
         run: npm ci
 
       - name: Start the database
+        id: start
         run: docker compose up -d --wait
 
       - name: Check the connection
         run: npm run db:check
+
+      - name: Apply the migrations
+        run: npm run db:migrate
+
+      # Creates, migrates and drops its own database next to DATABASE_URL's.
+      # Runs also when the migrations failed, as long as the database started.
+      - name: Run the database tests
+        if: ${{ !cancelled() && steps.start.outcome == 'success' }}
+        run: npm run test:db
 
       - name: Show the database log
         if: failure()
