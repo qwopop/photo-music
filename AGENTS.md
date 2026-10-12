@@ -21,6 +21,9 @@ CI (`.github/workflows/ci.yml`, GitHub Actions, Node.js 24) runs `npm ci`, then 
 
 - Dependencies are added in `package.json`. Do not add one without asking.
 - Never commit secrets. Keep `.env*` files git-ignored and list every variable in `.env.example`.
+- Read environment variables only through `lib/config` (lint fails on `process.env` anywhere else). Add a new variable to its schema in `lib/config/schema.ts` and to `.env.example` in the same commit.
+- Call the `lib/config` getters only while handling a request: in a POST handler or server action, or after a runtime API such as `await connection()` in a GET handler or page. Never call them at module top level or inside `"use cache"` code. This way build and tests need no secrets, and no value ends up in prerendered output.
+- Pass SDKs their keys from `lib/config` instead of letting them read their own environment variables, such as the AWS SDK's `AWS_*` or Auth.js's `AUTH_SECRET`.
 - Never recommend or invent tracks that a music provider did not return. If Spotify or YouTube fails, fall back to a search link.
 - Do not call the vision API again when regenerating recommendations; reuse the stored analysis.
 - Photos are private: no public URLs, and guests' photos are never stored.

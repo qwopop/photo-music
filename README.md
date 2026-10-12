@@ -60,6 +60,29 @@ Run a single test file:
 npx vitest run lib/greeting.test.ts
 ```
 
+## Configuration
+
+Settings such as the database URL and API keys come from environment variables. One server-only module, `lib/config`, reads and validates them. It has one getter per feature: `getDatabaseConfig()`, `getVisionConfig()`, `getSpotifyConfig()`, `getYouTubeConfig()` and `getStorageConfig()`. [`.env.example`](.env.example) lists every variable, with what it is, which feature needs it, where to get it, and its format.
+
+Copy `.env.example` to `.env.local`, then fill in only the groups for the features you work on. Leave the others empty:
+
+```sh
+cp .env.example .env.local
+```
+
+- Next.js loads `.env.local` for `npm run dev`, `npm run build` and `npm start`. `npm test` does not read it. The tests set their own values, and pass with no variables set.
+- Never commit `.env.local`. Git ignores every `.env*` file except `.env.example`.
+- Write a `$` in a value as `\$`, because Next.js expands `$NAME` references. For example, write the password `pa$$word` as `pa\$\$word`.
+- A missing variable shows up as an error that names it the first time a feature uses it, not when the app starts or builds. The getter for that feature throws a `ConfigError` that lists every missing or invalid variable of its group, but never their values. For example:
+
+  ```text
+  Spotify configuration is missing or invalid:
+    - SPOTIFY_CLIENT_ID is missing
+    - SPOTIFY_CLIENT_SECRET is missing
+  ```
+
+In production, set the same variables in the server's environment instead of a file. To add a variable, follow the Rules in [`AGENTS.md`](AGENTS.md).
+
 ## Continuous integration
 
 The `CI` workflow ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on GitHub Actions on every push to any branch and on every pull request.
