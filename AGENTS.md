@@ -24,3 +24,7 @@ The project is not scaffolded yet (issue #1). These are the intended commands; u
 - Present moods as interpretations, not facts.
 - Do not post to Instagram automatically; generate copy-ready text only.
 - Run `npm run lint`, `npm run typecheck`, and `npm test` before committing.
+
+## Documents
+
+- `_docs/process.md` — how work is organized
