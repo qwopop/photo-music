@@ -212,6 +212,55 @@ upload buffer, and the results page (#13) will receive the shared
 `PaletteResult`, including repeated color slots. This issue adds no HTTP route
 or page styling.
 
+## Shared mood interpretation
+
+Browser and server code import the same plain data contract:
+
+```ts
+import {
+  PRIMARY_EMOTIONS, moodResultSchema, moodResultJsonSchema,
+  type PrimaryEmotion, type MoodResult,
+} from "@/lib/mood";
+
+const result: MoodResult = moodResultSchema.parse(untrustedResult);
+// Or use moodResultSchema.safeParse(untrustedResult) to inspect success/errors.
+// moodResultJsonSchema is generated from this Zod schema, using Zod 4's API.
+```
+
+Every result has exactly four required fields:
+
+| Field | Bounds |
+| --- | --- |
+| `primaryEmotion` | `happy`, `sad`, `calm`, `energetic`, or `romantic`, case-sensitive |
+| `secondaryMoods` | 0–3 free-form nonblank tags, each 1–40 characters |
+| `explanation` | Nonblank text, 1–500 characters |
+| `confidence` | Finite number, 0–1 inclusive |
+
+```json
+{
+  "primaryEmotion": "calm",
+  "secondaryMoods": ["dreamy", "quiet anticipation"],
+  "explanation": "The soft evening light suggests a calm atmosphere.",
+  "confidence": 0.7
+}
+```
+
+Missing/extra fields, numeric strings, NaN and Infinity are invalid. Valid
+strings keep their original spaces and case; there is no coercion, trimming,
+normalization or default value. Lengths follow the installed Zod 4.6.6 string
+checks (Unicode code points), including for astral characters such as emoji.
+The exported JSON-serializable draft-2020-12 JSON Schema preserves required
+fields, enum, count/length/number bounds, nonblank patterns and
+`additionalProperties: false`. Types are inferred from that same Zod source.
+`MOOD_EXAMPLES` exports five synthetic, valid interpretive examples.
+
+Moods describe a reading of the photo's scenery, lighting, colors and
+atmosphere. Confidence is the strength of that interpretation, not a factual
+claim about a person's feelings or a calibrated guarantee. Importing or
+validating this shared module requires no Next runtime, API key, environment
+variable, database or network call. Provider integration and the analysis API
+remain separate tasks (#11 and #12).
+
 ## Configuration
 
 Settings such as the database URL and API keys come from environment variables. One server-only module, `lib/config`, reads and validates them. It has one getter per feature: `getDatabaseConfig()`, `getVisionConfig()`, `getSpotifyConfig()`, `getYouTubeConfig()` and `getStorageConfig()`. [`.env.example`](.env.example) lists every variable, with what it is, which feature needs it, where to get it, and its format.
