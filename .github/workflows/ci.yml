@@ -43,3 +43,41 @@ jobs:
       - name: Build
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run build
+
+  # Starts the local database from docker-compose.yml, the same file that
+  # developers use, and checks that the app can connect to it.
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      # The local development URL from .env.example. Not a secret.
+      DATABASE_URL: postgresql://photo_music:photo_music_dev@localhost:54320/photo_music
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Start the database
+        run: docker compose up -d --wait
+
+      - name: Check the connection
+        run: npm run db:check
+
+      - name: Show the database log
+        if: failure()
+        run: docker compose logs db
+
+      - name: Remove the database container and volume
+        if: always()
+        run: docker compose down -v
