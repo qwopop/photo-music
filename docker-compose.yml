@@ -1,0 +1,48 @@
+# Local PostgreSQL for development. See "Local database" in README.md.
+#
+#   docker compose up -d --wait   start it, and wait until it accepts connections
+#   docker compose down           stop it and keep the data
+#   docker compose down -v        stop it and delete all data
+#
+# The credentials are development defaults, not secrets: the database listens
+# only on this computer's loopback interface. They match the local
+# DATABASE_URL in .env.example:
+#
+#   postgresql://photo_music:photo_music_dev@localhost:54320/photo_music
+#
+# The image applies POSTGRES_USER, POSTGRES_PASSWORD and POSTGRES_DB only when
+# it creates a new, empty volume. After changing them, or the PostgreSQL major
+# version, run `docker compose down -v` to start over.
+
+name: photo-music
+
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: photo_music
+      POSTGRES_PASSWORD: photo_music_dev
+      POSTGRES_DB: photo_music
+    ports:
+      # Port 54320 on 127.0.0.1 only, so the weak password stays off the
+      # network and a PostgreSQL server already using 5432 is not in the way.
+      - "127.0.0.1:54320:5432"
+    volumes:
+      # From version 18 the image keeps its data in a subfolder of
+      # /var/lib/postgresql (18/docker), and refuses to start with a mount at
+      # the old /var/lib/postgresql/data path.
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      # Lets `docker compose up --wait` return only once the server accepts
+      # connections. It checks over TCP, not the Unix socket: on first start,
+      # the image sets up the database with a temporary server that listens
+      # only on the socket.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-p", "5432", "-U", "photo_music", "-d", "photo_music"]
+      start_period: 60s
+      start_interval: 1s
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  db-data:
