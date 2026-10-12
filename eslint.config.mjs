@@ -20,9 +20,11 @@ const eslintConfig = defineConfig([
     },
   },
   {
-    // The config module's entry point is the only file that reads process.env.
-    // lib/config/schema.ts takes the environment as an argument instead.
-    files: ["lib/config/index.ts"],
+    // The config module's entry points are the only files that read
+    // process.env: index.ts for app code, and node.ts for code that runs
+    // outside Next.js. lib/config/schema.ts takes the environment as an
+    // argument instead.
+    files: ["lib/config/index.ts", "lib/config/node.ts"],
     rules: {
       "no-restricted-properties": "off",
     },
