@@ -64,11 +64,28 @@ npx vitest run lib/greeting.test.ts
 ## Private temporary image upload
 
 `POST /api/upload` accepts `multipart/form-data` with exactly one file in the
-`image` field. JPEG, PNG and WebP are detected from their contents; filenames
-and declared MIME types are ignored. The server fully decodes the image with
-sharp, rejecting corrupt/truncated data and images above **25,000,000 decoded
-pixels** (including all WebP animation frames). PNG/APNG uses the decoder's
-default image; additional APNG frames have the limitation documented below.
+`image` field. JPEG, **static PNG** and WebP (including animated WebP) are
+detected from their contents; filenames and declared MIME types are ignored.
+The server fully decodes the image with sharp, rejecting corrupt/truncated data
+and images above **25,000,000 decoded pixels** (including all WebP animation
+frames together).
+
+PNG has two checks, and both must pass. First, before any decoder runs, a
+bounded linear scan of the bytes requires a complete PNG datastream: valid
+chunk lengths and CRCs, `IHDR` first, consecutive `IDAT` chunks and a complete
+terminal `IEND` (bytes after `IEND` are not part of the image and are ignored).
+sharp alone can recover pixels from a PNG whose `IEND` is missing or cut off,
+so such a file is rejected here. Second, sharp decodes every pixel.
+
+**APNG (animated PNG) is not supported and is rejected.** A PNG containing any
+`acTL`, `fcTL` or `fdAT` animation chunk before its `IEND` fails with HTTP 415
+`INVALID_IMAGE` during that first scan, before decoding and before anything is
+retained. This applies whether the default image is part of the animation or a
+separate fallback image, to incomplete animation chunk sequences, and whatever
+filename or MIME type the client sends. APNG frames are never reconstructed or
+decoded, and the declared frame count or size never drives allocation, loops
+or decompression. No request field, header, query parameter, filename or MIME
+type can change this policy.
 
 The inclusive file limit is **10 MiB (10,485,760 bytes)**. The entire multipart
 request, including boundaries and headers, is limited to **10 MiB + 64 KiB
@@ -106,6 +123,8 @@ Future server-side analysis imports `consumeUpload(id)` or `releaseUpload(id)`
 from the server-only `lib/upload/store` module. Consumption removes the entry
 before returning `{ bytes, mimeType, size }` and succeeds once. Unknown,
 expired, consumed or released handles return `undefined`; release is idempotent.
+Analysis that uses a public upload handle therefore only ever receives an image
+admitted by this strict public policy: never an APNG or an incomplete PNG.
 Guests and signed-in users share this temporary path. Uploading requires no
 login, database, object storage, API key or external call, and never saves a
 photo to disk, `public/`, logs or photo history.
@@ -120,7 +139,7 @@ safe messages and no underlying exception details:
 | Status | Code | Cause |
 | --- | --- | --- |
 | 400 | `INVALID_UPLOAD` | Non-multipart, malformed body, missing boundary, or a missing/duplicate/non-file `image` field |
-| 415 | `INVALID_IMAGE` | Empty, unsupported, corrupt or over-pixel-limit image |
+| 415 | `INVALID_IMAGE` | Empty, unsupported, corrupt, incompletely framed (for example a PNG without a complete `IEND`), animated PNG (APNG) or over-pixel-limit image |
 | 413 | `FILE_TOO_LARGE` | File exceeds 10 MiB |
 | 413 | `REQUEST_TOO_LARGE` | Multipart body exceeds 10 MiB + 64 KiB |
 | 503 | `UPLOAD_CAPACITY_EXCEEDED` | Temporary entry or retained-byte capacity is full |
@@ -134,6 +153,11 @@ curl --silent --show-error --include \
   -F 'image=@lib/upload/fixtures/sample.jpg;type=image/jpeg' \
   http://localhost:3000/api/upload
 ```
+
+The synthetic PNG/APNG fixtures in `lib/image/fixtures/` (see its README)
+exercise the rejections: for example, `apng-default-frame.apng` or
+`missing-iend.png` returns 415 `INVALID_IMAGE`, even when sent as
+`type=image/jpeg`.
 
 Do not paste a live upload handle into public logs or issue comments. Release
 it through the server-only API after processing, or let its ten-minute TTL expire.
@@ -188,27 +212,33 @@ a white image 1, and equal black/white regions approximately 0.5. An image with
 no visible sampled pixels rejects with `PaletteError.code = "NO_VISIBLE_PIXELS"`
 and the fixed message `The image has no visible pixels.`
 
-Animated **WebP uses its first visual frame** for the palette, while upload
+Animated **WebP uses its first visual frame** for the palette, while
 validation still decodes all WebP frames and checks their aggregate pixel
-count. PNG, including APNG, uses **the decoder's default IDAT image**. The
-current sharp/libvips stack does not expose APNG animation frames, so that
-default image may differ from the first animation frame; later APNG frame
-integrity and aggregate animation pixels are not validated here. The APNG
-policy/validation follow-up is [#37](https://github.com/qwopop/photo-music/issues/37).
+count.
 
-Direct extraction reuses the upload validator's **10 MiB file limit** and
-**25,000,000 decoded-pixel limit** before sampling. Empty, unsupported,
-malformed, corrupt or truncated decoded content rejects with the fixed safe
-`INVALID_IMAGE` error; an oversized file uses `FILE_TOO_LARGE`. Extraction
-also requires complete default-PNG chunk framing, checksums and the mandatory
-terminal `IEND`, since the decoder can recover pixels from truncated PNG files.
-This bounded container check does not decode additional APNG animation frames.
+Direct extraction reuses the upload validator, including its **10 MiB file
+limit**, **25,000,000 decoded-pixel limit** and the PNG container check
+(complete chunk framing, CRCs and the mandatory terminal `IEND`) before
+sampling. Empty, unsupported, malformed, corrupt or truncated content rejects
+with the fixed safe `INVALID_IMAGE` error; an oversized file uses
+`FILE_TOO_LARGE`.
+
+`extractPalette` is a direct server-side utility, not public upload admission,
+and it differs from upload in one way: for APNG it explicitly requests the
+validator's internal **default-image** policy instead of rejecting. For a
+well-framed APNG it uses **the PNG's default `IDAT` image**, which may differ
+from the first animation frame. The container/CRC/`IEND` check and the file
+and default-image pixel limits still apply, but the APNG animation chunks are
+opaque: their frames are not decoded, selected or validated, and their
+aggregate pixels are not bounded. `POST /api/upload` always uses the rejecting
+policy, and no client input can select the internal one.
 `PaletteError` exposes only a stable code and fixed user-facing message, with no decoder
 details or photo logging. Original bytes are never mutated, cached or written
 to disk; extraction requires no database, network service or API key.
 
 The later analysis API (#12) will call this function using a consumed private
-upload buffer, and the results page (#13) will receive the shared
+upload buffer, which the strict public policy has already admitted (so it is
+never an APNG), and the results page (#13) will receive the shared
 `PaletteResult`, including repeated color slots. This issue adds no HTTP route
 or page styling.
 

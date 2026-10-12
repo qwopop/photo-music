@@ -20,8 +20,9 @@ are used.
   validation of the whole animation.
 - `default-image.apng` was built using PNG chunks and Node's zlib/CRC APIs. It
   has a separate red 2×1 default IDAT image and a blue 2×1 animation frame. It
-  demonstrates the documented libvips default-image fallback, not full APNG
-  animation support. APNG frame validation and policy are tracked in #37.
+  demonstrates the direct palette utility's documented default-image policy,
+  not APNG animation support. Public upload rejects it (#37). More PNG/APNG
+  policy fixtures are in `lib/image/fixtures/`.
 - `over-pixel-animation.webp` encodes two solid black/white 4000×4000 lossless
   frames in a few KiB. Each frame fits the 25M-pixel limit, while their 32M total
   must reject before pixel decoding. Fixture generation is done once, so this
