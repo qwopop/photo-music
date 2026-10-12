@@ -4,6 +4,7 @@ import sharp from "sharp";
 import { UploadError } from "../upload/errors";
 import { MAX_IMAGE_PIXELS } from "../upload/limits";
 import { validateImage } from "../upload/validate";
+import { assertCompletePng } from "./png";
 
 /** Shared server-side contract for later photo analysis and result-page theming. */
 export interface PaletteResult {
@@ -41,7 +42,8 @@ interface Bucket {
  */
 export async function extractPalette(bytes: Buffer): Promise<PaletteResult> {
   try {
-    await validateImage(bytes);
+    const image = await validateImage(bytes);
+    if (image.mimeType === "image/png") assertCompletePng(bytes);
     const { data } = await sharp(bytes, {
       failOn: "warning",
       limitInputPixels: MAX_IMAGE_PIXELS,

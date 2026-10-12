@@ -199,8 +199,11 @@ policy/validation follow-up is [#37](https://github.com/qwopop/photo-music/issue
 Direct extraction reuses the upload validator's **10 MiB file limit** and
 **25,000,000 decoded-pixel limit** before sampling. Empty, unsupported,
 malformed, corrupt or truncated decoded content rejects with the fixed safe
-`INVALID_IMAGE` error; an oversized file uses `FILE_TOO_LARGE`. `PaletteError`
-exposes only a stable code and fixed user-facing message, with no decoder
+`INVALID_IMAGE` error; an oversized file uses `FILE_TOO_LARGE`. Extraction
+also requires complete default-PNG chunk framing, checksums and the mandatory
+terminal `IEND`, since the decoder can recover pixels from truncated PNG files.
+This bounded container check does not decode additional APNG animation frames.
+`PaletteError` exposes only a stable code and fixed user-facing message, with no decoder
 details or photo logging. Original bytes are never mutated, cached or written
 to disk; extraction requires no database, network service or API key.
 

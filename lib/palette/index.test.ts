@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { crc32 } from "node:zlib";
 import sharp from "sharp";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MAX_FILE_BYTES, MAX_IMAGE_PIXELS } from "../upload/limits";
@@ -13,6 +14,15 @@ afterEach(() => vi.restoreAllMocks());
 
 function rgb(hex: string): number[] {
   return [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16));
+}
+
+function pngChunk(type: string, data: Buffer): Buffer {
+  const bytes = Buffer.alloc(data.length + 12);
+  bytes.writeUInt32BE(data.length, 0);
+  bytes.write(type, 4, 4, "ascii");
+  data.copy(bytes, 8);
+  bytes.writeUInt32BE(crc32(bytes.subarray(4, -4)), bytes.length - 4);
+  return bytes;
 }
 
 describe("extractPalette", () => {
@@ -159,6 +169,84 @@ describe("extractPalette", () => {
     expect(secondFrame).toBeGreaterThan(0);
     bytes.fill(0xff, secondFrame + 8, bytes.length);
     await expect(extractPalette(bytes)).rejects.toMatchObject({ code: "INVALID_IMAGE" });
+  });
+
+  it.each([1, 2, 4, 8, 11, 12])("rejects PNG missing %i terminal IEND bytes despite decodable IDAT pixels", async (removed) => {
+    await expect(extractPalette(png.subarray(0, png.length - removed))).rejects.toMatchObject({
+      name: "PaletteError", code: "INVALID_IMAGE", message: "Choose a valid JPEG, PNG, or WebP image.",
+    });
+  });
+
+  it("rejects a damaged IEND checksum without exposing chunk/decoder details", async () => {
+    const bytes = Buffer.from(png);
+    bytes[bytes.length - 1] ^= 1;
+    await expect(extractPalette(bytes)).rejects.toMatchObject({ code: "INVALID_IMAGE" });
+  });
+
+  it("rejects a malformed nonempty terminal IEND chunk", async () => {
+    const bytes = Buffer.concat([png.subarray(0, -12), pngChunk("IEND", Buffer.from([0]))]);
+    await expect(extractPalette(bytes)).rejects.toMatchObject({ code: "INVALID_IMAGE" });
+  });
+
+  it("rejects an incomplete or checksum-corrupt ancillary chunk before a complete IEND", async () => {
+    const comment = pngChunk("tEXt", Buffer.from("note\0synthetic fixture"));
+    const corrupt = Buffer.from(comment);
+    corrupt[corrupt.length - 1] ^= 1;
+    const malformed = Buffer.from(comment);
+    malformed.writeUInt32BE(0xffffffff, 0);
+    for (const badChunk of [corrupt, malformed]) {
+      await expect(extractPalette(Buffer.concat([png.subarray(0, -12), badChunk, png.subarray(-12)])))
+        .rejects.toMatchObject({ code: "INVALID_IMAGE" });
+    }
+  });
+
+  it("accepts a complete valid PNG with ancillary data and split consecutive IDAT chunks", async () => {
+    const chunks: Buffer[] = [png.subarray(0, 8)];
+    for (let offset = 8; offset < png.length;) {
+      const length = png.readUInt32BE(offset);
+      const end = offset + length + 12;
+      const type = png.toString("ascii", offset + 4, offset + 8);
+      if (type === "IDAT") {
+        const data = png.subarray(offset + 8, end - 4);
+        const midpoint = Math.floor(data.length / 2);
+        chunks.push(pngChunk("IDAT", data.subarray(0, midpoint)), pngChunk("IDAT", data.subarray(midpoint)));
+      } else {
+        if (type === "IEND") chunks.push(pngChunk("tEXt", Buffer.from("note\0synthetic fixture")));
+        chunks.push(png.subarray(offset, end));
+      }
+      offset = end;
+    }
+    expect(await extractPalette(Buffer.concat(chunks))).toEqual(await extractPalette(png));
+  });
+
+  it("accepts the inclusive file-size boundary for a complete PNG datastream", async () => {
+    const bytes = Buffer.alloc(MAX_FILE_BYTES);
+    png.copy(bytes);
+    expect(await extractPalette(bytes)).toEqual(await extractPalette(png));
+  });
+
+  it("preserves valid indexed-color PNG palette data", async () => {
+    const bytes = await sharp(png).png({ palette: true, colours: 2 }).toBuffer();
+    expect(await extractPalette(bytes)).toEqual(await extractPalette(png));
+  });
+
+  it("rejects non-consecutive IDAT data even when a complete IEND is present", async () => {
+    const chunks: Buffer[] = [png.subarray(0, 8)];
+    for (let offset = 8; offset < png.length;) {
+      const length = png.readUInt32BE(offset);
+      const end = offset + length + 12;
+      if (png.toString("ascii", offset + 4, offset + 8) === "IDAT") {
+        const data = png.subarray(offset + 8, end - 4);
+        const midpoint = Math.floor(data.length / 2);
+        chunks.push(
+          pngChunk("IDAT", data.subarray(0, midpoint)),
+          pngChunk("tEXt", Buffer.from("note\0synthetic fixture")),
+          pngChunk("IDAT", data.subarray(midpoint)),
+        );
+      } else chunks.push(png.subarray(offset, end));
+      offset = end;
+    }
+    await expect(extractPalette(Buffer.concat(chunks))).rejects.toMatchObject({ code: "INVALID_IMAGE" });
   });
 
   it("honors the shared 10 MiB direct-input limit before decoding", async () => {
