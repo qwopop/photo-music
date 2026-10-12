@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 export default defineConfig({
   resolve: {
@@ -15,5 +15,8 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Tests that need PostgreSQL run with `npm run test:db`
+    // (vitest.db.config.mts), never in `npm test`.
+    exclude: [...configDefaults.exclude, "**/*.db.test.ts"],
   },
 });
