@@ -3,9 +3,11 @@ import { crc32 } from "node:zlib";
 import sharp from "sharp";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MAX_FILE_BYTES, MAX_IMAGE_PIXELS } from "../upload/limits";
+import * as validation from "../upload/validate";
 import { extractPalette, MAX_PALETTE_SIDE, PaletteError } from "./index";
 
 const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url));
+const imageFixture = (name: string) => readFileSync(new URL(`../image/fixtures/${name}`, import.meta.url));
 const png = fixture("red-dominant.png");
 const jpeg = fixture("solid.jpg");
 const webp = fixture("solid.webp");
@@ -133,11 +135,47 @@ describe("extractPalette", () => {
   it("uses the documented default PNG image for APNG, which can differ from its animation", async () => {
     const bytes = fixture("default-image.apng");
     // This valid APNG has a separate red default IDAT image and blue animation
-    // frame. libvips exposes the red default only; full APNG handling is #37.
+    // frame. libvips exposes the red default only. Public upload rejects APNG;
+    // this direct utility explicitly keeps its default image.
     const metadata = await sharp(bytes, { animated: true }).metadata();
     expect(metadata.format).toBe("png");
     expect(metadata.pages).toBeUndefined();
     expect(await extractPalette(bytes)).toEqual({ colors: Array(6).fill("#ff0000"), brightness: 0.2126 });
+  });
+
+  it("requests the explicit internal default-image policy from the shared validator", async () => {
+    const validate = vi.spyOn(validation, "validateImage");
+    await extractPalette(png);
+    expect(validate.mock.calls).toEqual([[png, { pngAnimation: "default-image" }]]);
+  });
+
+  it.each([
+    ["the default image as its first animation frame", "apng-default-frame.apng"],
+    ["incomplete animation controls", "apng-missing-controls.apng"],
+    ["corrupt later frame data, which stays opaque", "apng-corrupt-later-frame.apng"],
+  ])("extracts the red default image of a well-framed APNG with %s", async (_, name) => {
+    expect(await extractPalette(imageFixture(name))).toEqual({ colors: Array(6).fill("#ff0000"), brightness: 0.2126 });
+  });
+
+  it("bounds only the default image of an APNG whose declared animation exceeds the aggregate budget", async () => {
+    // Two 4000×4000 frames (32M pixels in total); only the black 16M-pixel default image is decoded.
+    expect(await extractPalette(imageFixture("apng-over-aggregate.apng"))).toEqual({ colors: Array(6).fill("#000000"), brightness: 0 });
+  });
+
+  it("still applies the shared container/CRC guard and file limit to APNG", async () => {
+    const bytes = imageFixture("apng-default-frame.apng");
+    const corrupt = Buffer.from(bytes);
+    corrupt[corrupt.indexOf("fdAT", 0, "latin1") + 6] ^= 1;
+    for (const invalid of [bytes.subarray(0, -12), bytes.subarray(0, -3), corrupt]) {
+      await expect(extractPalette(invalid)).rejects.toMatchObject({ name: "PaletteError", code: "INVALID_IMAGE" });
+    }
+    const oversized = Buffer.alloc(MAX_FILE_BYTES + 1);
+    bytes.copy(oversized);
+    await expect(extractPalette(oversized)).rejects.toMatchObject({ code: "FILE_TOO_LARGE" });
+  });
+
+  it.each(["missing-iend.png", "truncated-iend.png"])("rejects the static %s fixture", async (name) => {
+    await expect(extractPalette(imageFixture(name))).rejects.toMatchObject({ code: "INVALID_IMAGE" });
   });
 
   it("rejects fully transparent content with the fixed NO_VISIBLE_PIXELS error", async () => {

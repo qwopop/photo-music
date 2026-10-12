@@ -4,7 +4,6 @@ import sharp from "sharp";
 import { UploadError } from "../upload/errors";
 import { MAX_IMAGE_PIXELS } from "../upload/limits";
 import { validateImage } from "../upload/validate";
-import { assertCompletePng } from "./png";
 
 /** Shared server-side contract for later photo analysis and result-page theming. */
 export interface PaletteResult {
@@ -39,11 +38,15 @@ interface Bucket {
  * Validate the entire input first, then sample at most 256×256 first-frame
  * pixels. Five-bit RGB buckets group nearby shades; their alpha-weighted means
  * are representatives. Equal weights sort by ascending hex value.
+ *
+ * Unlike public upload, this direct utility explicitly asks the shared
+ * validator for an APNG's default IDAT image. The complete-container/CRC guard
+ * and the file and default-image pixel limits still apply; additional APNG
+ * frames stay opaque and are neither validated nor selected.
  */
 export async function extractPalette(bytes: Buffer): Promise<PaletteResult> {
   try {
-    const image = await validateImage(bytes);
-    if (image.mimeType === "image/png") assertCompletePng(bytes);
+    await validateImage(bytes, { pngAnimation: "default-image" });
     const { data } = await sharp(bytes, {
       failOn: "warning",
       limitInputPixels: MAX_IMAGE_PIXELS,

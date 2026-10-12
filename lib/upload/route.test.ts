@@ -12,6 +12,18 @@ const fixtures = {
   webp: readFileSync(new URL("./fixtures/sample.webp", import.meta.url)),
   gif: readFileSync(new URL("./fixtures/unsupported.gif", import.meta.url)),
 };
+const imageFixture = (name: string) => readFileSync(new URL(`../image/fixtures/${name}`, import.meta.url));
+const incompletePng = {
+  "missing IEND": imageFixture("missing-iend.png"),
+  "truncated IEND": imageFixture("truncated-iend.png"),
+};
+const apng = {
+  "animated default image": imageFixture("apng-default-frame.apng"),
+  "separate fallback default image": readFileSync(new URL("../palette/fixtures/default-image.apng", import.meta.url)),
+  "missing animation controls": imageFixture("apng-missing-controls.apng"),
+  "corrupt later frame data": imageFixture("apng-corrupt-later-frame.apng"),
+  "over-aggregate animation": imageFixture("apng-over-aggregate.apng"),
+};
 const handles: string[] = [];
 
 afterEach(() => {
@@ -88,6 +100,83 @@ describe("POST /api/upload", () => {
     const bytes = Buffer.from(fixtures[format]);
     bytes.fill(0xff, Math.floor(bytes.length / 2), bytes.length - 2);
     await expectError(multipart(bytes), 415, "INVALID_IMAGE");
+  });
+
+  /** Spies on sharp's real decoder construction and decoding methods without changing them. */
+  function spyOnDecoder() {
+    const prototype = sharp.prototype as unknown as Record<"_createInputDescriptor" | "metadata" | "raw", () => unknown>;
+    return [vi.spyOn(prototype, "_createInputDescriptor"), vi.spyOn(prototype, "metadata"), vi.spyOn(prototype, "raw")];
+  }
+
+  async function expectRejectedBeforeDecodeOrStore(request: Request) {
+    const decoder = spyOnDecoder();
+    const retain = vi.spyOn(uploadStore, "put");
+    const { response, body } = await upload(request);
+    expect(response.status).toBe(415);
+    expect(body).toEqual({ error: { code: "INVALID_IMAGE", message: "Choose a valid JPEG, PNG, or WebP image." } });
+    for (const spy of [...decoder, retain]) expect(spy).not.toHaveBeenCalled();
+  }
+
+  it.each(Object.entries(incompletePng))("rejects a PNG with %s although sharp alone recovers its pixels", async (_, bytes) => {
+    await expect(sharp(bytes, { failOn: "warning" }).raw().toBuffer()).resolves.toBeInstanceOf(Buffer);
+    await expectRejectedBeforeDecodeOrStore(multipart(bytes, "photo.png", "image/png"));
+  });
+
+  it("rejects a PNG with a corrupt chunk CRC before decoding or retention", async () => {
+    const bytes = Buffer.from(fixtures.png);
+    bytes[32] ^= 1; // last byte of the IHDR chunk's CRC
+    await expectRejectedBeforeDecodeOrStore(multipart(bytes, "photo.png", "image/png"));
+  });
+
+  it.each(Object.entries(apng).flatMap(([name, bytes]) => [
+    [name, bytes, "animation.png", "image/png"],
+    [name, bytes, "animation.apng", "image/apng"],
+    [name, bytes, "photo.jpg", "image/jpeg"],
+    [name, bytes, "notes.txt", "text/plain"],
+  ] as const))("rejects APNG with %s sent as %s (%s) before decoding or retention", async (_, bytes, name, type) => {
+    await expectRejectedBeforeDecodeOrStore(multipart(bytes, name, type));
+  });
+
+  it("cannot be switched to the internal APNG default-image policy by a client", async () => {
+    const validate = vi.spyOn(validation, "validateImage");
+    const form = new FormData();
+    form.append("image", new File([new Uint8Array(apng["animated default image"])], "default-image.png", { type: "image/png" }));
+    const request = new Request("http://localhost/api/upload?pngAnimation=default-image", {
+      method: "POST", body: form, headers: { "X-Png-Animation": "default-image" },
+    });
+    await expectRejectedBeforeDecodeOrStore(request);
+    expect(validate).toHaveBeenCalledTimes(1);
+    expect(validate.mock.calls[0]).toHaveLength(1);
+
+    const withField = new FormData();
+    withField.append("image", new File([new Uint8Array(apng["animated default image"])], "a.png", { type: "image/png" }));
+    withField.append("pngAnimation", "default-image");
+    await expectError(new Request("http://localhost/api/upload", { method: "POST", body: withField }), 400, "INVALID_UPLOAD");
+  });
+
+  it("calls the shared validator with the public default policy for accepted uploads too", async () => {
+    const validate = vi.spyOn(validation, "validateImage");
+    const { response } = await upload(multipart(fixtures.png, "photo.png", "image/png"));
+    expect(response.status).toBe(201);
+    expect(validate.mock.calls).toEqual([[fixtures.png]]);
+  });
+
+  it("accepts ordinary static PNG variations after the container guard and genuine decoding", async () => {
+    const variations = [
+      await sharp(fixtures.png).png({ palette: true, colours: 2 }).toBuffer(),
+      await sharp(fixtures.png).png({ progressive: true }).toBuffer(),
+      await sharp(fixtures.png).withMetadata().png().toBuffer(),
+      Buffer.concat([fixtures.png, Buffer.alloc(16)]),
+    ];
+    for (const bytes of variations) {
+      const decode = vi.spyOn(sharp.prototype, "raw");
+      const { response, body } = await upload(multipart(bytes, "photo.png", "image/png"));
+      expect(response.status).toBe(201);
+      expect(body.upload).toMatchObject({ mimeType: "image/png", size: bytes.length });
+      expect(decode).toHaveBeenCalled();
+      expect(consumeUpload(body.upload.id)?.bytes.equals(bytes)).toBe(true);
+      vi.restoreAllMocks();
+    }
   });
 
   it("rejects an image above the decode pixel allocation limit", async () => {
