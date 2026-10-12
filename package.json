@@ -13,7 +13,8 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "db:check": "node --env-file-if-exists=.env.local --import tsx scripts/db-check.ts",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "node --env-file-if-exists=.env.local --import tsx scripts/db-migrate.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.4",
