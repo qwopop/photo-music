@@ -4,15 +4,18 @@ Photo-to-music website: upload a photo, get its mood, a featured song, a playlis
 
 ## Commands
 
-The project is not scaffolded yet (issue #1). These are the intended commands; update this list if the real scripts differ.
+These match the scripts in `package.json`; update this list if they change.
 
-- `npm install` - install dependencies
+- `npm install` - install dependencies (CI uses `npm ci`, which fails if `package-lock.json` is out of sync with `package.json`)
 - `npm run dev` - start the dev server
 - `npm run build` - production build
-- `npm run lint` - lint
-- `npm run typecheck` - TypeScript check (`tsc --noEmit`)
-- `npm test` - the whole test suite
+- `npm start` - serve the production build
+- `npm run lint` - lint (`eslint --max-warnings=0`); fails on any warning, not only on errors
+- `npm run typecheck` - generates Next's route types first (`next typegen`, into `.next/types/`), then runs `tsc --noEmit`
+- `npm test` - the whole test suite (`vitest run`)
 - `npx vitest run path/to/file.test.ts` - one test file
+
+CI (`.github/workflows/ci.yml`, GitHub Actions, Node.js 24) runs `npm ci`, then lint, typecheck, test and build on every push to any branch and on every pull request. Any failing step turns the run red.
 
 ## Rules
 
