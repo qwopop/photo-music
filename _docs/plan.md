@@ -53,21 +53,31 @@ A photo-inspired music discovery and social-content website. Users upload a phot
 
 ## 3. Architecture and Technology
 
+**Decision:** Next.js full-stack (TypeScript) + PostgreSQL, one codebase.
+
 | Area | Choice | Why |
 |------|--------|-----|
-| Frontend | React | Reusable components and an interactive results page |
-| Backend | Node.js + Express | Straightforward API development |
-| Database | PostgreSQL | Stores users, preferences, analysis results, playlists, and history |
+| Framework | Next.js (App Router) + TypeScript | One codebase and language for UI and server; server-rendered result pages give proper link previews for sharing |
+| Backend logic | Next.js route handlers / server actions | API keys, auth checks, and image processing stay server-side |
+| Database | PostgreSQL with Prisma or Drizzle | Stores users, preferences, analysis results, playlists, and history |
 | Image analysis | Hosted vision AI API | Avoids training and hosting a custom vision model |
 | Music data | Spotify and YouTube integrations | Real songs and playable destinations |
-| Image storage | Private object storage | Supports saved photo history without putting images in public folders |
-| Authentication | Email/password with secure sessions | Simple account system for the MVP |
+| Image storage | Private S3-compatible object storage (S3 or Cloudflare R2), signed URLs | Supports saved photo history without putting images in public folders |
+| Authentication | Auth.js (email/password with secure sessions) | Simple account system for the MVP |
+| Hosting | Vercel or similar | Easy deployment for a Next.js app |
+
+**Known trade-offs of this choice:**
+- Serverless time limits: a slow vision call plus building a 30-track playlist can time out. Use streaming responses or a background job, and cache each analysis so regeneration never repeats the vision call.
+- Framework lock-in to Next.js conventions, and less predictable hosting cost than a fixed server.
+- Spotify has restricted parts of its API for new apps (audio features, recommendations). Verify current access before designing the song-ranking step.
+
+**Alternatives considered:** React + Express + PostgreSQL (separate frontend/backend), React + FastAPI (Python), and SvelteKit/Nuxt + Supabase. Next.js was chosen for the fastest route to a polished MVP.
 
 **Why not train our own AI model?** It would require a labeled image dataset, model training, evaluation, and hosting. A hosted vision model lets us focus on building the actual product.
 
 **Why PostgreSQL instead of MongoDB?** Users, preferences, photos, analyses, and playlists have clear relationships. A relational database makes those relationships easier to manage.
 
-**Why not build everything in one frontend application?** API credentials, authentication checks, image processing, and database access belong on the server. This also makes the application easier to maintain.
+**Why a full-stack framework rather than a frontend-only app?** API credentials, authentication checks, image processing, and database access run on the server side of Next.js and never reach the browser.
 
 ---
 
