@@ -49,7 +49,7 @@ Type-check. This first runs `next typegen`, which generates Next's route types (
 npm run typecheck
 ```
 
-Run the whole test suite once:
+Run the test suite once. It needs no database: the tests that need PostgreSQL run with `npm run test:db` instead (see [Database tests](#database-tests)):
 
 ```sh
 npm test
@@ -302,7 +302,7 @@ cp .env.example .env.local
 ```
 
 - Next.js loads `.env.local` for `npm run dev`, `npm run build` and `npm start`. `npm test` does not read it. The tests set their own values, and pass with no variables set.
-- `npm run db:check` runs outside Next.js and loads only `.env.local` (not `.env` or other `.env.*` files), using Node's own parser (`node --env-file-if-exists=.env.local`). As in Next.js, a variable set in the shell wins over the file. Node's parser neither expands `$NAME` nor unescapes `\$`.
+- `npm run db:check`, `npm run db:migrate` and `npm run test:db` run outside Next.js and load only `.env.local` (not `.env` or other `.env.*` files), using Node's own parser (`node --env-file-if-exists=.env.local`). As in Next.js, a variable set in the shell wins over the file. Node's parser neither expands `$NAME` nor unescapes `\$`.
 - Never commit `.env.local`. Git ignores every `.env*` file except `.env.example`.
 - Write a `$` in a value as `\$`, because Next.js expands `$NAME` references. For example, write the password `pa$$word` as `pa\$\$word`. The database password is the exception: percent-encode its special characters in `DATABASE_URL` instead (`$` as `%24`, `@` as `%40`), so that the URL reads the same in Next.js and in `npm run db:check`. For example, the password `pa$$word` becomes `pa%24%24word`.
 - A missing variable shows up as an error that names it the first time a feature uses it, not when the app starts or builds. The getter for that feature throws a `ConfigError` that lists every missing or invalid variable of its group, but never their values. For example:
@@ -359,19 +359,89 @@ docker compose exec db psql -U photo_music -d photo_music
 - The database listens only on this computer (`127.0.0.1`), on port 54320 rather than PostgreSQL's usual 5432, so that it does not clash with a PostgreSQL server that is already installed and listening on 5432. Because nothing else can reach it, the credentials are development defaults rather than secrets, and they are committed.
 - Without Docker, any PostgreSQL 18 server works: create a user and a database for the app, point `DATABASE_URL` in `.env.local` at that server, and run `npm run db:check`.
 
+## Database schema and migrations
+
+The tables are defined with [Drizzle ORM](https://orm.drizzle.team/) in TypeScript, in [`lib/db/schema.ts`](lib/db/schema.ts). So far there is one table, `users`. Every change to the tables is a plain SQL migration in [`lib/db/migrations/`](lib/db/migrations), which `drizzle-kit generate` writes and which is committed. App code gets the database from `getDb()` in `lib/db`, only while handling a request (see the Rules in [`AGENTS.md`](AGENTS.md)).
+
+Apply the pending migrations to the database in `DATABASE_URL`. Run this after starting the database, and after pulling new migrations:
+
+```sh
+npm run db:migrate
+```
+
+- It prints the name of each migration it applied, or that the database is already up to date. When it cannot connect, it fails with the same messages as `npm run db:check`.
+- The pending migrations run in one transaction: if one fails, none of them is applied, and the command names the one that failed and the server's reason.
+- It refuses to run, and applies nothing, when the database has not applied a migration that is older than the newest one it has. This happens when two branches each add a migration. Drizzle would skip such a migration for good, so the command names it instead. Generate it again on top of the newest migration, or start a local database over (see below).
+
+To change the schema:
+
+1. Edit `lib/db/schema.ts`. Name every column in snake_case, such as `text("password_hash")`.
+2. Generate a migration, named after what changed:
+
+   ```sh
+   npm run db:generate -- --name add_display_name
+   ```
+
+3. Review the generated SQL in `lib/db/migrations/`. If drizzle-kit asks whether a column was renamed, answer carefully: a new column instead of a rename loses the old column's data.
+4. Apply it locally with `npm run db:migrate`, then commit the schema change together with the generated files (the SQL file and the changes in `lib/db/migrations/meta/`).
+
+`npm run db:generate` needs no database and no `DATABASE_URL`. When the schema has not changed, it writes nothing. CI runs it and fails if it would write a migration that is not committed.
+
+- Never edit or delete a migration that is on `master`. There are no down migrations, so fix a mistake forward with a new migration. Locally, you can start over instead: `docker compose down -v`, `docker compose up -d --wait`, then `npm run db:migrate`.
+- Do not use `drizzle-kit push`, `drizzle-kit migrate` or `drizzle-kit studio`. [`drizzle.config.ts`](drizzle.config.ts) has no database credentials on purpose: `npm run db:migrate` is the only way to apply migrations, so every database runs the same committed SQL and records it in its history table, `drizzle.__drizzle_migrations`.
+
+### Database tests
+
+Tests that need PostgreSQL are named `*.db.test.ts`, and `npm test` never runs them. Start the [local database](#local-database), then run them:
+
+```sh
+npm run test:db
+```
+
+- It needs a running database on this computer, and a database user with the `CREATEDB` privilege. The local database's user has it. On another server, a superuser can grant it with `ALTER ROLE <user> CREATEDB;`.
+- Each run creates its own database, named `photo_music_test_` plus a random suffix, on the server in `DATABASE_URL`. It applies the migrations to it with the same code as `npm run db:migrate`, runs the tests against it, and drops it at the end, also when a test fails. It never changes the `DATABASE_URL` database itself, so you do not need to run `npm run db:migrate` first.
+- It runs only against a server on this computer. For a `DATABASE_URL` host other than `localhost`, `127.0.0.1` or `::1`, it stops before connecting.
+- Like `npm run db:check`, it loads `.env.local`, and a `DATABASE_URL` set in the shell wins over the file. When it cannot test, for example because the database is not running, it fails with a short message instead of skipping the tests.
+
+A run that was killed can leave a `photo_music_test_...` database behind. To remove it, open a SQL shell (`\q` quits):
+
+```sh
+docker compose exec db psql -U photo_music -d photo_music
+```
+
+List the leftover test databases:
+
+```sql
+\l photo_music_test_*
+```
+
+Drop one of them by its name:
+
+```sql
+DROP DATABASE photo_music_test_0123456789ab WITH (FORCE);
+```
+
+Or, while no `npm run test:db` is running, drop all of them at once:
+
+```sql
+SELECT format('DROP DATABASE %I WITH (FORCE)', datname) FROM pg_database WHERE starts_with(datname, 'photo_music_test_') \gexec
+```
+
 ## Continuous integration
 
 The `CI` workflow ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on GitHub Actions on every push to any branch and on every pull request. It has two jobs, `checks` and `database`, which run side by side on Ubuntu with Node.js 24. Other Node.js versions allowed by `engines` are not tested in CI. The run is red if any step of either job fails.
 
 The `checks` job:
 
-- It installs dependencies with `npm ci`, then runs `npm run lint`, `npm run typecheck`, `npm test` and `npm run build`, in that order. These are the same scripts you run locally. `npm ci` fails if `package-lock.json` is out of sync with `package.json`, so commit both together.
+- It installs dependencies with `npm ci`, then runs `npm run db:generate`, `npm run lint`, `npm run typecheck`, `npm test` and `npm run build`, in that order. These are the same scripts you run locally.
+- The first check, "Migrations match the schema", runs `npm run db:generate`. It fails if that changed or added any file in `lib/db/migrations`, which means that `lib/db/schema.ts` changed without a committed migration: run `npm run db:generate` and commit the result. It also fails when drizzle-kit needs to ask whether a column was renamed, which it cannot ask in CI. `npm ci` fails if `package-lock.json` is out of sync with `package.json`, so commit both together.
 - If one check fails, the later checks still run, so a single run reports every problem. If the install fails, the checks are skipped.
 - It needs no secrets, `.env` file, environment variables or database.
 
 The `database` job:
 
 - It installs dependencies with `npm ci`, starts the database from `docker-compose.yml` with `docker compose up -d --wait`, and runs `npm run db:check`, as described in [Local database](#local-database).
+- Then it applies the migrations with `npm run db:migrate`, and runs the database tests with `npm run test:db`, as described in [Database schema and migrations](#database-schema-and-migrations). The database tests also run when the migrations failed, as long as the database started.
 - If a step fails, it prints the database container's log (`docker compose logs db`). At the end it always removes the container and its volume with `docker compose down -v`.
 - It sets only `DATABASE_URL`, to the local URL from `.env.example`, which is not a secret. It uses no secrets.
 
