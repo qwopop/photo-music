@@ -61,6 +61,82 @@ Run a single test file:
 npx vitest run lib/greeting.test.ts
 ```
 
+## Private temporary image upload
+
+`POST /api/upload` accepts `multipart/form-data` with exactly one file in the
+`image` field. JPEG, PNG and WebP are detected from their contents; filenames
+and declared MIME types are ignored. The server fully decodes the image with
+sharp, rejecting corrupt/truncated data and images above **25,000,000 decoded
+pixels** (including all frames of animated images).
+
+The inclusive file limit is **10 MiB (10,485,760 bytes)**. The entire multipart
+request, including boundaries and headers, is limited to **10 MiB + 64 KiB
+(10,551,296 bytes)**. The actual incoming stream is bounded before multipart
+parsing, independently of `Content-Length`. An over-limit chunk is discarded
+and the stream is cancelled; no remaining body is read or parsed.
+
+Success is HTTP 201 with `Cache-Control: no-store`:
+
+```json
+{
+  "upload": {
+    "id": "<opaque random handle>",
+    "mimeType": "image/jpeg",
+    "size": 270,
+    "expiresAt": "2026-01-01T00:10:00.000Z"
+  }
+}
+```
+
+The handle has 256 bits of cryptographic randomness and is a private capability:
+keep it out of logs and public links. The response contains no photo bytes,
+filename, storage path, or URL. `GET /api/upload` returns 405; there is no HTTP
+route for retrieving uploaded bytes. All upload responses are uncacheable.
+
+Validated original bytes remain only in process memory, for **10 minutes** after
+acceptance. An unref'ed timer deletes them even without a later request. The
+temporary store admits at most **100 uploads** and **100 MiB (104,857,600 bytes)**
+of original image buffers across all entries. At capacity, another image is
+rejected without retention; release, consumption, and expiry restore capacity.
+Parsing and bounded image decoding also require transient memory, so these
+retained-byte limits are not a total process-memory limit.
+
+Future server-side analysis imports `consumeUpload(id)` or `releaseUpload(id)`
+from the server-only `lib/upload/store` module. Consumption removes the entry
+before returning `{ bytes, mimeType, size }` and succeeds once. Unknown,
+expired, consumed or released handles return `undefined`; release is idempotent.
+Guests and signed-in users share this temporary path. Uploading requires no
+login, database, object storage, API key or external call, and never saves a
+photo to disk, `public/`, logs or photo history.
+
+This process-local store loses uploads when the server restarts. A handle must
+be processed by the same instance; it cannot move between workers or serverless
+instances. Durable deployment design belongs to issue #33.
+
+Failures have `{ "error": { "code": "...", "message": "..." } }`, with fixed
+safe messages and no underlying exception details:
+
+| Status | Code | Cause |
+| --- | --- | --- |
+| 400 | `INVALID_UPLOAD` | Non-multipart, malformed body, missing boundary, or a missing/duplicate/non-file `image` field |
+| 415 | `INVALID_IMAGE` | Empty, unsupported, corrupt or over-pixel-limit image |
+| 413 | `FILE_TOO_LARGE` | File exceeds 10 MiB |
+| 413 | `REQUEST_TOO_LARGE` | Multipart body exceeds 10 MiB + 64 KiB |
+| 503 | `UPLOAD_CAPACITY_EXCEEDED` | Temporary entry or retained-byte capacity is full |
+| 500 | `UPLOAD_FAILED` | Unexpected internal failure |
+
+Start `npm run dev`, then run this local smoke check from the repository root
+using the synthetic fixture (no personal photo is needed):
+
+```sh
+curl --silent --show-error --include \
+  -F 'image=@lib/upload/fixtures/sample.jpg;type=image/jpeg' \
+  http://localhost:3000/api/upload
+```
+
+Do not paste a live upload handle into public logs or issue comments. Release
+it through the server-only API after processing, or let its ten-minute TTL expire.
+
 ## Configuration
 
 Settings such as the database URL and API keys come from environment variables. One server-only module, `lib/config`, reads and validates them. It has one getter per feature: `getDatabaseConfig()`, `getVisionConfig()`, `getSpotifyConfig()`, `getYouTubeConfig()` and `getStorageConfig()`. [`.env.example`](.env.example) lists every variable, with what it is, which feature needs it, where to get it, and its format.
