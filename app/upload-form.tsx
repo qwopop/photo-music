@@ -30,15 +30,14 @@ function carriesFiles(dataTransfer: DataTransfer | null): boolean {
 }
 
 /** Resolves whether the browser can decode and display the image at `url`. */
-async function canDisplay(url: string): Promise<boolean> {
-  const image = new Image();
-  image.src = url;
-  try {
-    await image.decode();
-    return image.naturalWidth > 0 && image.naturalHeight > 0;
-  } catch {
-    return false;
-  }
+function canDisplay(url: string): Promise<boolean> {
+  // Load events, unlike HTMLImageElement.decode(), also fire in a background tab.
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve(image.naturalWidth > 0 && image.naturalHeight > 0);
+    image.onerror = () => resolve(false);
+    image.src = url;
+  });
 }
 
 export default function UploadForm() {
