@@ -12,6 +12,7 @@
     "lint": "eslint --max-warnings=0",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
+    "test:s3": "node --env-file-if-exists=.env.local node_modules/vitest/vitest.mjs run --config vitest.s3.config.mts",
     "db:check": "node --env-file-if-exists=.env.local --import tsx scripts/db-check.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file-if-exists=.env.local --import tsx scripts/db-migrate.ts",

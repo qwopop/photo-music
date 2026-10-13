@@ -576,7 +576,7 @@ In production, set the same variables in the server's environment instead of a f
 
 The app stores its data in PostgreSQL 18. [`docker-compose.yml`](docker-compose.yml) runs it in Docker for development, with fixed development credentials. The data lives in a Docker volume, not in the repo.
 
-Start the database. The command returns once the database accepts connections. The first start also downloads the image and creates the database, which takes a little longer:
+Start the database and MinIO. The command returns once the database and MinIO accept connections and the private bucket is initialized. The first start also downloads the image and creates the database, which takes a little longer:
 
 ```sh
 docker compose up -d --wait
@@ -712,6 +712,30 @@ Cloudflare R2 or MinIO), accessed only through `lib/storage`. Keys are
 access): the module never sets an ACL and never returns an unsigned URL. It
 hands out presigned GET URLs that last 300 seconds by default and at most
 3600. Configure it with the `S3_*` variables (see `.env.example`).
+
+### Local MinIO and real S3 tests
+
+`docker compose up -d --wait` starts MinIO alongside PostgreSQL, with S3 on
+`127.0.0.1:9000` and its console on `127.0.0.1:9001`. The initializer creates
+`photo-music-photos` and explicitly disables anonymous access. The credentials
+below are local development defaults; use separate restricted keys in production.
+Put these values in `.env.local`:
+
+```text
+S3_ENDPOINT=http://localhost:9000
+S3_REGION=us-east-1
+S3_BUCKET=photo-music-photos
+S3_ACCESS_KEY_ID=photo_music
+S3_SECRET_ACCESS_KEY=photo_music_dev
+```
+
+Run `npm run test:s3` to verify uploads, signed downloads, unsigned and expired
+URL rejection, deletion, and idempotent deletion against the real service.
+These `*.s3.test.ts` tests never run in `npm test`. Each run uses a unique user
+prefix and removes its objects afterward. To start storage alone use
+`docker compose up -d --wait minio minio-init`. `docker compose down` retains
+its volume; `docker compose down -v` deletes both storage and database data.
+CI's `storage` job runs the same tests and always removes containers and volumes.
 
 ## Spotify search
 
