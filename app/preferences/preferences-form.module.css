@@ -1,0 +1,16 @@
+.form { display: grid; gap: 1.25rem; margin-top: 1rem; }
+.form fieldset { border: 1px solid #8886; border-radius: .5rem; padding: .75rem 1rem 1rem; min-width: 0; }
+.form legend { font-weight: 600; padding: 0 .35rem; }
+.options { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; }
+.options label { display: inline-flex; align-items: center; gap: .4rem; }
+.row { display: flex; gap: .5rem; }
+.row input { flex: 1; min-width: 0; padding: .6rem; font: inherit; color: inherit; background: var(--background); border: 1px solid #888; border-radius: .35rem; }
+.form button { padding: .6rem 1rem; font: inherit; color: inherit; background: var(--background); cursor: pointer; border: 1px solid #888; border-radius: .35rem; }
+.form input:focus-visible, .form button:focus-visible { outline: 3px solid #5a78dd; outline-offset: 2px; }
+.error { color: #b42318; min-height: 1.5em; margin-top: .35rem; line-height: 1.5; }
+@media (prefers-color-scheme: dark) { .error { color: #ffaaa1; } }
+.tags { list-style: none; display: flex; flex-wrap: wrap; gap: .5rem; }
+.tags li { display: inline-flex; align-items: center; gap: .35rem; max-width: 100%; padding: .2rem .2rem .2rem .7rem; border: 1px solid #888; border-radius: 999px; }
+.tags span { overflow-wrap: anywhere; min-width: 0; }
+.tags button { padding: .1rem .55rem; border-radius: 999px; }
+.json { overflow-x: auto; padding: .75rem; border: 1px solid #8886; border-radius: .5rem; white-space: pre-wrap; overflow-wrap: anywhere; }
