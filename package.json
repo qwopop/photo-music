@@ -18,6 +18,7 @@
     "test:db": "node --env-file-if-exists=.env.local node_modules/vitest/vitest.mjs run --config vitest.db.config.mts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.131.0",
     "@aws-sdk/client-s3": "^3.1150.0",
     "@aws-sdk/s3-request-presigner": "^3.1150.0",
     "@node-rs/argon2": "^2.2.1",
