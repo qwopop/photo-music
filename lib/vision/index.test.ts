@@ -278,7 +278,7 @@ describe("Claude client", () => {
     expect(requests).toHaveLength(0);
   });
 
-  it.each([400, 404, 413])("does not retry HTTP %i", async (status) => {
+  it.each([400, 404, 408, 409, 413, 422])("does not retry HTTP %i", async (status) => {
     vi.stubEnv("VISION_API_KEY", KEY);
     const { requests, fetchFn } = recorder(() => json({ type: "error", error: { message: SENTINEL } }, status));
     expect(await codeOf(analyze(fetchFn))).toBe("VISION_UNAVAILABLE");

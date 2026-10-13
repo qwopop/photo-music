@@ -21,6 +21,16 @@ export interface ClaudeVisionClientOptions {
   timeoutMs?: number;
 }
 
+/** Only 429, 5xx, connection errors and timeouts are worth one more try. */
+function isTransient(error: unknown): boolean {
+  if (error instanceof Anthropic.APIConnectionError) return true; // includes timeouts
+  if (error instanceof Anthropic.APIError) {
+    const status = error.status;
+    return status === 429 || (typeof status === "number" && status >= 500);
+  }
+  return false;
+}
+
 /** Builds the real client. Nothing is read or opened until an analysis runs. */
 export function createClaudeVisionClient(options: ClaudeVisionClientOptions = {}): VisionClient {
   return {
@@ -39,7 +49,7 @@ export function createClaudeVisionClient(options: ClaudeVisionClientOptions = {}
         baseURL: "https://api.anthropic.com",
         logLevel: "off",
         timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-        maxRetries: 1,
+        maxRetries: 0, // retries are done below, only for transient failures
         ...(options.fetch ? { fetch: options.fetch } : {}),
       });
 
@@ -48,9 +58,8 @@ export function createClaudeVisionClient(options: ClaudeVisionClientOptions = {}
       const format = betaZodOutputFormat(moodResultSchema);
       const rawFormat = { ...format, parse: (text: string) => text };
 
-      let message;
-      try {
-        message = await sdk.beta.messages.parse({
+      const send = () =>
+        sdk.beta.messages.parse({
           model: VISION_MODEL,
           max_tokens: MAX_TOKENS,
           output_config: { effort: "low", format: rawFormat },
@@ -69,9 +78,17 @@ export function createClaudeVisionClient(options: ClaudeVisionClientOptions = {}
             },
           ],
         });
-      } catch (error) {
-        const status = error instanceof Anthropic.APIError ? error.status : undefined;
-        throw new VisionError(status === 401 || status === 403 ? "VISION_NOT_CONFIGURED" : "VISION_UNAVAILABLE");
+
+      let message;
+      for (let attempt = 1; ; attempt++) {
+        try {
+          message = await send();
+          break;
+        } catch (error) {
+          if (attempt < 2 && isTransient(error)) continue;
+          const status = error instanceof Anthropic.APIError ? error.status : undefined;
+          throw new VisionError(status === 401 || status === 403 ? "VISION_NOT_CONFIGURED" : "VISION_UNAVAILABLE");
+        }
       }
 
       if (message.stop_reason === "refusal") throw new VisionError("VISION_REFUSED");
