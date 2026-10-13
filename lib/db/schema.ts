@@ -14,7 +14,7 @@
  * migrations and the runtime client always agree about names.
  */
 import { sql, type SQL } from "drizzle-orm";
-import { index, pgTable, text, timestamp, uniqueIndex, uuid, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { check, index, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid, type AnyPgColumn } from "drizzle-orm/pg-core";
 
 /** `lower(column)`, for case-insensitive comparisons and indexes. */
 export function lower(column: AnyPgColumn): SQL {
@@ -48,4 +48,20 @@ export const sessions = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index("sessions_user_id_idx").on(table.userId)],
+);
+
+/** Shared provider results, independent of any user's private data. */
+export const youtubeLinkCache = pgTable(
+  "youtube_link_cache",
+  {
+    title: text("title").notNull(),
+    firstArtist: text("first_artist").notNull(),
+    kind: text("kind").$type<"video" | "search">().notNull(),
+    url: text("url").notNull(),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.title, table.firstArtist] }),
+    check("youtube_link_cache_kind_check", sql`${table.kind} in ('video', 'search')`),
+  ],
 );

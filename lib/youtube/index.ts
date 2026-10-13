@@ -8,10 +8,19 @@ export interface VideoLinkResolver {
   resolve(track: Track): Promise<unknown>;
 }
 
+export interface YouTubeCacheKey { title: string; firstArtist: string }
+export interface YouTubeCacheEntry { link: YouTubeLink; fetchedAt: number }
+/** A shared store may throw; the resolver falls back to its bounded memory cache. */
+export interface YouTubeCacheStore {
+  get(key: YouTubeCacheKey): Promise<YouTubeCacheEntry | null>;
+  set(key: YouTubeCacheKey, entry: YouTubeCacheEntry): Promise<void>;
+}
+
 export interface YouTubeResolverOptions {
   apiKey: string;
   fetch?: typeof fetch;
   now?: () => number;
+  cacheStore?: YouTubeCacheStore;
 }
 
 const SEARCH_URL = "https://www.googleapis.com/youtube/v3/search";
@@ -43,8 +52,12 @@ export function youTubeSearchLink(title: string, artist: string): YouTubeLink {
 
 const squash = (text: string) => text.trim().replace(/\s+/g, " ").toLowerCase();
 
-function cacheKey(track: Track): string {
-  return `${squash(track.title)}\u0000${squash(track.artists[0] ?? "")}`;
+function normalizedKey(track: Track): YouTubeCacheKey {
+  return { title: squash(track.title), firstArtist: squash(track.artists[0] ?? "") };
+}
+
+function cacheKey(key: YouTubeCacheKey): string {
+  return JSON.stringify([key.title, key.firstArtist]);
 }
 
 type Outcome =
@@ -92,8 +105,8 @@ async function quotaReason(response: Response): Promise<boolean> {
  * Looks up YouTube video links with the Data API v3 search endpoint.
  *
  * Quota: one search costs 100 of the default 10,000 daily units, so about
- * 100 uncached searches a day. Answers are cached in memory (per resolver,
- * per server process), and after a quota error no request is made for an hour.
+ * 100 uncached searches a day. Answers are cached in memory and, when injected,
+ * a shared store. After a quota error no request is made for an hour.
  */
 export function createYouTubeResolver(options: YouTubeResolverOptions): VideoLinkResolver {
   const { apiKey } = options;
@@ -119,9 +132,9 @@ export function createYouTubeResolver(options: YouTubeResolverOptions): VideoLin
     else active--;
   }
 
-  function store(key: string, link: YouTubeLink, ttl: number): void {
+  function store(key: string, link: YouTubeLink, expires: number): void {
     cache.delete(key);
-    cache.set(key, { link, expires: now() + ttl });
+    cache.set(key, { link, expires });
     while (cache.size > MAX_CACHE_ENTRIES) {
       const oldest = cache.keys().next().value;
       if (oldest === undefined) break;
@@ -169,6 +182,18 @@ export function createYouTubeResolver(options: YouTubeResolverOptions): VideoLin
   async function lookup(key: string, track: Track): Promise<YouTubeLink> {
     const artist = track.artists[0] ?? "";
     const fallback = youTubeSearchLink(track.title, artist);
+    if (options.cacheStore) {
+      try {
+        const hit = await options.cacheStore.get(normalizedKey(track));
+        if (hit && youtubeLinkSchema.safeParse(hit.link).success && Number.isFinite(hit.fetchedAt)) {
+          const expires = hit.fetchedAt + (hit.link.kind === "video" ? VIDEO_CACHE_TTL_MS : NO_RESULT_CACHE_TTL_MS);
+          if (hit.fetchedAt <= now() && expires > now()) {
+            store(key, hit.link, expires);
+            return hit.link;
+          }
+        }
+      } catch { /* Database unavailable: continue with the provider and memory cache. */ }
+    }
     await acquire();
     try {
       if (now() < pausedUntil) return fallback;
@@ -179,7 +204,11 @@ export function createYouTubeResolver(options: YouTubeResolverOptions): VideoLin
       }
       const link = outcome.type === "found" ? outcome.link : fallback;
       if (!youtubeLinkSchema.safeParse(link).success) return fallback;
-      store(key, link, outcome.type === "found" ? VIDEO_CACHE_TTL_MS : NO_RESULT_CACHE_TTL_MS);
+      const fetchedAt = now();
+      store(key, link, fetchedAt + (outcome.type === "found" ? VIDEO_CACHE_TTL_MS : NO_RESULT_CACHE_TTL_MS));
+      try {
+        await options.cacheStore?.set(normalizedKey(track), { link, fetchedAt });
+      } catch { /* The successful result remains available in memory. */ }
       return link;
     } finally {
       release();
@@ -189,7 +218,7 @@ export function createYouTubeResolver(options: YouTubeResolverOptions): VideoLin
   return {
     async resolve(track: Track): Promise<YouTubeLink> {
       try {
-        const key = cacheKey(track);
+        const key = cacheKey(normalizedKey(track));
         const hit = cache.get(key);
         if (hit) {
           if (hit.expires > now()) return hit.link;

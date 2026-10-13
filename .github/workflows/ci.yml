@@ -89,7 +89,7 @@ jobs:
 
       - name: Start the database
         id: start
-        run: docker compose up -d --wait
+        run: docker compose up -d --wait db
 
       - name: Check the connection
         run: npm run db:check
@@ -108,5 +108,35 @@ jobs:
         run: docker compose logs db
 
       - name: Remove the database container and volume
+        if: always()
+        run: docker compose down -v
+
+  storage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      S3_ENDPOINT: http://localhost:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: photo-music-photos
+      S3_ACCESS_KEY_ID: photo_music
+      S3_SECRET_ACCESS_KEY: photo_music_dev
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Start private MinIO bucket
+        run: docker compose up -d --wait minio minio-init
+      - name: Run real S3 tests
+        run: npm run test:s3
+      - name: Show storage logs
+        if: failure()
+        run: docker compose logs minio minio-init
+      - name: Remove containers and volumes
         if: always()
         run: docker compose down -v

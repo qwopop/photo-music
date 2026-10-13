@@ -17,6 +17,6 @@ export default defineConfig({
     environment: "node",
     // Tests that need PostgreSQL run with `npm run test:db`
     // (vitest.db.config.mts), never in `npm test`.
-    exclude: [...configDefaults.exclude, "**/*.db.test.ts"],
+    exclude: [...configDefaults.exclude, "**/*.db.test.ts", "**/*.s3.test.ts"],
   },
 });
