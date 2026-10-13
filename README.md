@@ -279,6 +279,63 @@ never an APNG), and the results page (#13) will receive the shared
 `PaletteResult`, including repeated color slots. This issue adds no HTTP route
 or page styling.
 
+## Photo mood analysis
+
+`lib/vision` (server-only) turns a photo's bytes into a validated `MoodResult`.
+
+```ts
+import { analyzePhotoMood, createClaudeVisionClient, VisionError } from "@/lib/vision";
+
+try {
+  const mood = await analyzePhotoMood(bytes, createClaudeVisionClient());
+} catch (error) {
+  if (error instanceof VisionError) error.code; // see the table below
+}
+```
+
+`analyzePhotoMood` first runs the shared `validateImage` (the upload policy),
+so nothing paid is called for an invalid photo. It then sends a newly encoded
+copy to the client: EXIF orientation applied, first frame only, longest side
+at most 1568 px (never enlarged), no EXIF, GPS, XMP or IPTC, encoded as JPEG
+(`image/jpeg`) at most 5 MB as base64. Transparency is flattened onto white
+(`#ffffff`). The answer is checked with `moodResultSchema` and returned unchanged.
+
+**Faking in tests.** Implement `VisionClient` (`analyze(image)` returns the
+parsed answer as `unknown`); no key or network is needed:
+
+```ts
+const fake: VisionClient = { analyze: async () => ({ primaryEmotion: "calm", secondaryMoods: [], explanation: "The light suggests calm.", confidence: 0.6 }) };
+await analyzePhotoMood(bytes, fake);
+```
+
+**Provider and request.** Anthropic's Claude API through `@anthropic-ai/sdk`
+(pinned to `0.131.0`), model `claude-opus-5-5` (`VISION_MODEL`), one POST to
+`https://api.anthropic.com/v1/messages` through `client.beta.messages.parse`
+with `output_config.effort: "low"`, a JSON schema derived from
+`moodResultSchema`, `fallbacks: "default"` and the `server-side-fallback-2026-07-01`
+beta, and `max_tokens` 4096. It sends no sampling parameters, `thinking`,
+forced tool choice or prefill. The key is `VISION_API_KEY`, read through
+`lib/config` when an analysis runs; the SDK ignores its own `ANTHROPIC_*`
+variables and logs nothing. Each attempt times out after 30 s; a transient
+failure (429, 5xx, connection error, timeout) is retried once, so at most two
+requests are made. `createClaudeVisionClient({ fetch, timeoutMs })` accepts
+overrides for tests.
+
+| Code | Meaning |
+| --- | --- |
+| `INVALID_IMAGE` | Empty, unsupported (such as GIF), corrupt or truncated image |
+| `FILE_TOO_LARGE` | More than 10 MiB |
+| `VISION_NOT_CONFIGURED` | `VISION_API_KEY` unset or blank, or the provider answered 401/403 |
+| `VISION_UNAVAILABLE` | Other provider failure, timeout, or a client that threw something else |
+| `VISION_REFUSED` | The model refused |
+| `VISION_BAD_RESPONSE` | Cut-off, non-JSON or schema-invalid answer |
+
+`VisionError` carries only the code and a fixed message: no cause, provider
+text, model output, image data or key.
+
+**Privacy.** Only a downscaled copy with no metadata goes to Anthropic's API.
+This module stores and logs nothing.
+
 ## Shared mood interpretation
 
 Browser and server code import the same plain data contract:

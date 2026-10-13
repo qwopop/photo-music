@@ -1,0 +1,19 @@
+{
+  "valid": {
+    "id": "msg_fixture",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-opus-5-5",
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"primaryEmotion\":\"calm\",\"secondaryMoods\":[\"quiet\",\"soft\"],\"explanation\":\"The soft evening light suggests a calm atmosphere.\",\"confidence\":0.7}"
+      }
+    ],
+    "stop_reason": "end_turn",
+    "stop_sequence": null,
+    "usage": { "input_tokens": 100, "output_tokens": 40 }
+  },
+  "thinkingBlock": { "type": "thinking", "thinking": "", "signature": "fixture-signature" },
+  "fallbackBlock": { "type": "fallback", "from": "claude-opus-5-5", "to": "claude-sonnet-5-5" }
+}
