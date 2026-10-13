@@ -527,6 +527,32 @@ synthetic, schema-valid playlists with fictional titles, fake IDs and
 `example.com` covers. They are for tests and documentation only and must never
 be shown to users as recommendations.
 
+## Playlist recommendation
+
+`recommendPlaylist(mood, preferences, deps)` in `lib/recommend` builds a
+`Playlist` from provider results. The caller injects
+`TrackSearch.search(query: TrackQuery): Promise<unknown[]>` and
+`VideoLinkResolver.resolve(track: Track): Promise<unknown>`. `TrackQuery` has
+`text`, optional `genre` or `artist`, `languages`, and `limit`; the engine reads
+no environment, opens no connection, and reuses the supplied mood without
+calling vision code.
+
+It searches the top three genres from `buildSearchCriteria` using the first two
+keywords, and the first three preference artists using each artist's name.
+Each query passes through the selected languages and requests 20 tracks.
+Invalid provider tracks are dropped, duplicates are removed, and no track is
+invented. Candidate score is the sum of weights for searches that returned it,
+plus 1 when one of its artists matches a preference artist (case-insensitively).
+Ties favor the earlier query and provider position, then Spotify ID. Selection
+limits each first artist to two tracks unless that would leave the playlist
+shorter than requested; the highest-ranked selected track is featured.
+
+Reasons are tentative interpretations of the mood and search source. If YouTube
+resolution fails, returns an invalid link, or takes longer than five seconds,
+the track gets a YouTube search link. `RecommendError` uses `SEARCH_UNAVAILABLE`
+when every search fails and `NO_TRACKS` when no valid candidates are found.
+
+
 ## Photo mood analysis
 
 `lib/vision` (server-only, `@/lib/vision`) turns a photo into a validated `MoodResult`:
