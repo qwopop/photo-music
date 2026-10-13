@@ -403,6 +403,7 @@ song could fit the photo's mood; an interpretation, not a fact).
 | --- | --- |
 | `mood` | The `MoodResult` the playlist was built from, detected or corrected by the user |
 | `requestedLength` | `5`, `10`, `20` or `30` |
+| `preferences` | The `Preferences` the playlist was built from (`preferencesSchema` from `lib/preferences`, imported, not copied); all-empty defaults are valid |
 | `tracks` | 1 up to `requestedLength` playlist tracks in display order, with unique `spotifyId`s |
 | `featuredTrackId` | The `spotifyId` of one of the `tracks`; it counts toward `requestedLength` and need not be first |
 
@@ -415,6 +416,7 @@ song could fit the photo's mood; an interpretation, not a fact).
     "confidence": 0
   },
   "requestedLength": 5,
+  "preferences": { "genres": [], "artists": [], "languages": [], "situation": null, "length": 5 },
   "tracks": [
     {
       "spotifyId": "ExampleTrackId00000001",
@@ -435,13 +437,29 @@ song could fit the photo's mood; an interpretation, not a fact).
 A playlist can be shorter than `requestedLength`, because a provider may return
 fewer real tracks and tracks are never invented. An empty list is invalid.
 
+`preferences` records the music preferences the playlist was built from, so
+that regenerating, saving and the history page can reuse and show them. A user
+who skipped the form gets the defaults (no genres, artists or languages,
+`situation: null`), which are valid. `preferences` is required: a stored
+playlist from before this field existed no longer validates. Artist names are
+user-typed, so do not log them.
+
+Length has one source of truth in practice: `requestedLength` stays on the
+playlist and `preferences.length` must equal it. Neither schema reuses the
+other's length schema, so `lib/preferences` does not import `lib/playlist` and
+there is no import cycle. The agreement is a Zod-only rule with the issue path
+`preferences.length`; a test also fails if `PLAYLIST_LENGTHS` and
+`PREFERENCE_LENGTHS` ever differ.
+
 `playlistJsonSchema` is the JSON-serializable draft-2020-12 JSON Schema
 generated from `playlistSchema` with Zod 4's `z.toJSONSchema`. It keeps the
 required fields, `additionalProperties: false`, the length values, both YouTube
-kinds, the patterns and the length, count and integer bounds. Four rules exist
-only in the Zod schema, because JSON Schema cannot express them: `spotifyUrl`
-matches `spotifyId`, track IDs are unique, `featuredTrackId` names a listed
-track, and `tracks` is no longer than `requestedLength`.
+kinds, the patterns, the length, count and integer bounds, and the
+`preferences` fields (genres, artists, languages, situation, length). Five rules
+exist only in the Zod schema, because JSON Schema cannot express them:
+`spotifyUrl` matches `spotifyId`, track IDs are unique, `featuredTrackId` names
+a listed track, `tracks` is no longer than `requestedLength`, and
+`preferences.length` equals `requestedLength`.
 
 Nothing is coerced, defaulted, trimmed or re-cased. `PLAYLIST_EXAMPLES` holds
 synthetic, schema-valid playlists with fictional titles, fake IDs and
