@@ -327,6 +327,32 @@ claim about a person's feelings or a calibrated guarantee. Importing or
 validating this shared module requires no Next runtime, API key, environment
 variable, database or network call. Provider integration and the analysis API
 remain separate tasks (#11 and #12).
+## Music preferences
+
+`lib/preferences` is a plain, browser-safe module (no environment variable, no
+network). Import `preferencesSchema`, `Preferences`, `DEFAULT_PREFERENCES`,
+`parsePreferences(params)`, `serializePreferences(preferences)` and the lists
+`GENRES`, `LANGUAGES`, `SITUATIONS`, `PREFERENCE_LENGTHS` from
+`@/lib/preferences`.
+
+| Field | Contract |
+| --- | --- |
+| `genres` | Ids from `GENRES`, no duplicates, may be empty |
+| `artists` | 0 to 10 names, 1 to 100 characters trimmed, no duplicates ignoring case |
+| `languages` | Ids from `LANGUAGES`, no duplicates, may be empty |
+| `situation` | `studying`, `walking-at-night`, `relaxing`, `driving` or `null` |
+| `length` | 5, 10, 20 or 30 |
+
+Empty lists mean "no preference". The page `/preferences` keeps the choices in
+the query string with repeated keys; values equal to the default are left out:
+
+```
+/preferences?genre=jazz&genre=lo-fi&artist=Nina%20Simone&language=english&situation=driving&length=20
+```
+
+`parsePreferences` never throws: unknown keys and ids are ignored and invalid
+values fall back to the defaults.
+
 
 ## Shared track and playlist contract
 
