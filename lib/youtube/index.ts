@@ -189,6 +189,7 @@ export function createYouTubeResolver(options: YouTubeResolverOptions): VideoLin
   return {
     async resolve(track: Track): Promise<YouTubeLink> {
       try {
+        if (!apiKey.trim()) return youTubeSearchLink(track.title, track.artists[0] ?? "");
         const key = cacheKey(track);
         const hit = cache.get(key);
         if (hit) {

@@ -721,3 +721,22 @@ hands out presigned GET URLs that last 300 seconds by default and at most
 - **Paging.** Search pages are limited to `MAX_PAGE_SIZE` (10, to be confirmed by #51), so a `limit` up to 50 is fetched in several requests with increasing `offset`, and cut to `limit`.
 - **Output.** Tracks in Spotify's order in the `Track` shape of `lib/playlist`; items that fail `trackSchema` are dropped. No ranking, deduplication or mood filtering happens here.
 - **Errors.** `SpotifyError` with a fixed message and a `code`: `NOT_CONFIGURED`, `AUTH_FAILED` (token endpoint 400/401, or a second 401 on search), `RATE_LIMITED` (a `429` whose `Retry-After` is missing or over 5 s, or a second `429`; one retry after waiting up to 5 s), `INVALID_QUERY` (`limit` not an integer from 1 to 50, or an empty query), and `UNAVAILABLE` (any other failure, including a timeout after 8 s). Errors never contain secrets, URLs or response bodies.
+
+## YouTube video links
+
+`lib/youtube` exports `createYouTubeResolver({ apiKey, fetch?, now? })` and
+`youTubeSearchLink(title, artist)`. The caller passes the API key per request;
+`fetch` and the clock default to global `fetch` and `Date.now`. The resolver
+searches the YouTube Data API v3 and only links to a returned video whose valid
+11-character ID has a title containing the track title (case-insensitive,
+whitespace-collapsed). When possible, it prefers a matching result whose title
+or channel also contains the first artist; otherwise it uses the first title
+match. If no result is acceptable or a request fails, it returns a YouTube
+search link.
+
+Found videos are cached for 7 days and searches with no acceptable result for
+1 hour. The cache is per resolver in the current server process, not shared
+across processes or restarts. A search costs 100 units from YouTube's default
+10,000 daily units, or about 100 uncached searches per day. After a quota
+exhaustion response, that resolver pauses new searches for an hour while still
+serving cached results.

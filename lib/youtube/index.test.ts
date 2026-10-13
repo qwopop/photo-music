@@ -37,14 +37,21 @@ const apiError = (status: number, reason: string) =>
 
 let clock = 0;
 let consoleSpies: Array<ReturnType<typeof vi.spyOn>>;
+let globalFetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   clock = 1_000_000;
   consoleSpies = (["log", "info", "warn", "error", "debug"] as const).map((m) =>
     vi.spyOn(console, m).mockImplementation(() => {}),
   );
+  globalFetchMock = vi.fn(() => {
+    throw new Error("Unexpected global fetch");
+  });
+  vi.stubGlobal("fetch", globalFetchMock);
 });
 afterEach(() => {
   for (const spy of consoleSpies) expect(spy).not.toHaveBeenCalled();
+  expect(globalFetchMock).not.toHaveBeenCalled();
+  vi.unstubAllGlobals();
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
@@ -66,6 +73,18 @@ const expectSearchLink = (link: unknown, t = track()) => {
 };
 
 describe("request", () => {
+  it("does not search when the API key is empty or whitespace", async () => {
+    const fetchMock = vi.fn();
+    const resolver = createYouTubeResolver({
+      apiKey: " \t\n",
+      fetch: fetchMock as unknown as typeof fetch,
+      now: () => clock,
+    });
+
+    expectSearchLink(await resolver.resolve(track()));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("sends exactly one GET with the documented parameters", async () => {
     const { resolver, fetchMock } = make(() => json(fixture("clear-match")));
     await resolver.resolve(track());
