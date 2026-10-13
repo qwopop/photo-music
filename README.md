@@ -712,3 +712,12 @@ Cloudflare R2 or MinIO), accessed only through `lib/storage`. Keys are
 access): the module never sets an ACL and never returns an unsigned URL. It
 hands out presigned GET URLs that last 300 seconds by default and at most
 3600. Configure it with the `S3_*` variables (see `.env.example`).
+
+## Spotify search
+
+`lib/spotify` (server-only) finds real tracks through `createSpotifySearch()`, which implements `TrackSearch` (`search(query): Promise<unknown[]>`; the interface lives in `lib/spotify` until `lib/recommend` defines its own). It uses only the client credentials flow and the search endpoint (`POST accounts.spotify.com/api/token` and `GET api.spotify.com/v1/search`), because other endpoints (audio features, recommendations, related artists) are restricted for new apps. The token is cached in memory and renewed 60 s before it expires. The config (`SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`) is read on the first search, never on import.
+
+- **Query.** `q` is `text`, then ` genre:"<genre>"` and/or ` artist:"<artist>"`; double quotes in those values are removed and a blank `text` is omitted. `languages` is accepted and ignored: Spotify search has no language filter.
+- **Paging.** Search pages are limited to `MAX_PAGE_SIZE` (10, to be confirmed by #51), so a `limit` up to 50 is fetched in several requests with increasing `offset`, and cut to `limit`.
+- **Output.** Tracks in Spotify's order in the `Track` shape of `lib/playlist`; items that fail `trackSchema` are dropped. No ranking, deduplication or mood filtering happens here.
+- **Errors.** `SpotifyError` with a fixed message and a `code`: `NOT_CONFIGURED`, `AUTH_FAILED` (token endpoint 400/401, or a second 401 on search), `RATE_LIMITED` (a `429` whose `Retry-After` is missing or over 5 s, or a second `429`; one retry after waiting up to 5 s), `INVALID_QUERY` (`limit` not an integer from 1 to 50, or an empty query), and `UNAVAILABLE` (any other failure, including a timeout after 8 s). Errors never contain secrets, URLs or response bodies.

@@ -1,0 +1,44 @@
+{
+  "tracks": {
+    "limit": 10,
+    "offset": 0,
+    "total": 5,
+    "items": [
+      {
+        "id": "11dFghVXANMlKmJXsNCbNl",
+        "name": "Calm Water",
+        "artists": [{ "name": "Ada North" }, { "name": "Bo Lake" }],
+        "album": {
+          "name": "Still",
+          "images": [
+            { "url": "https://i.scdn.co/image/fixture-large" },
+            { "url": "https://i.scdn.co/image/fixture-small" }
+          ]
+        },
+        "duration_ms": 201000
+      },
+      null,
+      {
+        "id": "22dFghVXANMlKmJXsNCbNl",
+        "name": "No Cover",
+        "artists": [{ "name": "Ada North" }],
+        "album": { "name": "Bare", "images": [] },
+        "duration_ms": 180000
+      },
+      {
+        "id": "bad id",
+        "name": "Bad Id",
+        "artists": [{ "name": "Ada North" }],
+        "album": { "name": "Oops", "images": [] },
+        "duration_ms": 1000
+      },
+      {
+        "id": "33dFghVXANMlKmJXsNCbNl",
+        "name": "Single",
+        "artists": [{ "name": "Cy Moss" }],
+        "album": { "images": [] },
+        "duration_ms": 150000
+      }
+    ]
+  }
+}
