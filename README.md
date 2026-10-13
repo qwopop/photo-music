@@ -548,6 +548,54 @@ To test the real client without a key or network, inject `fetch` (and a shorter 
 
 **Privacy.** Only the downscaled copy without metadata goes to Anthropic's API. The module stores nothing and logs nothing: no image data, no provider output, no key. The HTTP endpoint that maps these codes to statuses is issue #12.
 
+## Photo analysis endpoint
+
+`POST /api/analyze` accepts `application/json` with exactly one property:
+`{ "upload": "<handle>" }`. The UTF-8 request body is limited to 1,024 bytes.
+The handle comes from `POST /api/upload`, is consumed before analysis, and can
+be used only once; an empty, unknown, expired or previously used handle returns 404. A
+successful response is `{ "mood": MoodResult, "palette": PaletteResult }`.
+Every response is `Cache-Control: no-store`.
+
+| Status | Code | Cause |
+| --- | --- | --- |
+| 400 | `INVALID_REQUEST` | Non-JSON, malformed, oversized, missing or extra request fields |
+| 404 | `UPLOAD_NOT_FOUND` | Empty, unknown, expired or already consumed upload handle |
+| 415 | `INVALID_IMAGE` | Invalid image contents |
+| 413 | `FILE_TOO_LARGE` | Image exceeds 10 MiB |
+| 422 | `NO_VISIBLE_PIXELS` | Image has no visible pixels |
+| 422 | `VISION_REFUSED` | The vision provider refused the photo |
+| 429 | `RATE_LIMITED` | More than 10 valid requests from one IP in a rolling 10-minute window; includes a whole-seconds `Retry-After` header |
+| 502 | `VISION_BAD_RESPONSE` | The provider returned an unusable answer |
+| 503 | `VISION_UNAVAILABLE` | The provider is temporarily unavailable |
+| 503 | `VISION_NOT_CONFIGURED` | The server has no vision API key configured |
+| 500 | `ANALYSIS_FAILED` | An unexpected internal failure |
+| 405 | — | Any method other than `POST`; response allows only `POST` |
+
+The in-memory rate limiter uses the first `X-Forwarded-For` entry. Trust that
+header only behind a proxy that sets it; direct clients can otherwise spoof
+the value. A missing or blank first entry uses the shared `unknown` bucket.
+The deployment-wide limiter and proxy boundary are revisited in issues #33
+and #48.
+
+## Results demo and mood correction
+
+Open `/results/demo` for a fixture-only results view; it needs no API key,
+database or network. Query parameters select examples:
+
+| Parameter | Values | Default |
+| --- | --- | --- |
+| `mood` | `happy`, `sad`, `calm`, `energetic`, `romantic` | `happy` |
+| `palette` | `bright`, `dark`, `solid` | `bright` |
+| `stress` | `1` for the long-text fixture | off |
+
+Confidence is shown in words: below 0.4 is **Not very sure**, 0.4–<0.7 is
+**Somewhat sure**, 0.7–<0.9 is **Fairly sure**, and 0.9 or higher is
+**Very sure**. Mood correction changes only the displayed primary and
+secondary moods in client state. It keeps the original explanation and
+confidence, does not call vision again, and can be reset to the original
+reading.
+
 ## Configuration
 
 Settings such as the database URL and API keys come from environment variables. One server-only module, `lib/config`, reads and validates them. It has one getter per feature: `getDatabaseConfig()`, `getVisionConfig()`, `getSpotifyConfig()`, `getYouTubeConfig()` and `getStorageConfig()`. [`.env.example`](.env.example) lists every variable, with what it is, which feature needs it, where to get it, and its format.

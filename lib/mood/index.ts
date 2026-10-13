@@ -1,10 +1,19 @@
 import { z } from "zod";
 
-/** Fixed primary choices; secondary mood tags are deliberately free-form. */
+/** Fixed primary choices; secondary mood tags remain descriptive free-form text. */
 export const PRIMARY_EMOTIONS = ["happy", "sad", "calm", "energetic", "romantic"] as const;
 const primaryEmotionSchema = z.enum(PRIMARY_EMOTIONS);
 
 export type PrimaryEmotion = z.infer<typeof primaryEmotionSchema>;
+
+export {
+  SECONDARY_MOOD_OPTIONS,
+  createMoodCorrectionState,
+  isMoodCorrectionDirty,
+  moodCorrectionReducer,
+  type MoodCorrectionAction,
+  type MoodCorrectionState,
+} from "./correction";
 
 const secondaryMoodSchema = z.string().min(1).max(40).regex(/\S/, "A mood tag must contain a non-whitespace character.");
 const explanationSchema = z.string().min(1).max(500).regex(/\S/, "An explanation must contain a non-whitespace character.");
