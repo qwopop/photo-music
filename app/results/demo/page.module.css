@@ -1,0 +1,6 @@
+.main {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  padding: 24px 16px 48px;
+}
