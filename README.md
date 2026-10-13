@@ -341,7 +341,7 @@ This module stores and logs nothing.
 `POST /api/analyze` with `Content-Type: application/json` and exactly
 `{"upload": "<handle>"}` (body at most 1 KiB; the handle comes from
 `POST /api/upload`). Any other body, a non-JSON body or an extra field gives
-400. Other methods give 405 with `Allow: POST`.
+400. Any other method (GET, PUT, PATCH, DELETE, OPTIONS, HEAD) gives 405 with `Allow: POST`.
 
 Success (200): `{"mood": MoodResult, "palette": {"colors": [6 hex strings], "brightness": number}}`.
 Nothing else is returned. Every response sends `Cache-Control: no-store`.
@@ -353,8 +353,8 @@ Errors are `{"error": {"code", "message"}}`:
 
 | Cause | Status | Code |
 | --- | --- | --- |
-| Bad body | 400 | `INVALID_REQUEST` |
-| Unknown or expired handle | 404 | `UPLOAD_NOT_FOUND` |
+| Bad body (not JSON, over 1 KiB, missing or non-string `upload`, extra field) | 400 | `INVALID_REQUEST` |
+| Unknown, expired, empty or already used handle | 404 | `UPLOAD_NOT_FOUND` |
 | Unreadable image | 415 | `INVALID_IMAGE` |
 | Image too large | 413 | `FILE_TOO_LARGE` |
 | No visible pixels | 422 | `NO_VISIBLE_PIXELS` |
@@ -638,6 +638,19 @@ cp .env.example .env.local
   ```
 
 In production, set the same variables in the server's environment instead of a file. To add a variable, follow the Rules in [`AGENTS.md`](AGENTS.md).
+
+## Mood results demo
+
+`/results/demo` shows five example mood readings (the `MOOD_EXAMPLES` from `lib/mood`) with made-up palettes and a synthetic picture. It renders on the server from fixtures in `app/results/` and needs no database, API key or network. The page background comes from the first palette colour and the accents from the others; text is black or white, whichever contrasts more. Moods are shown as interpretations, never as facts.
+
+The `confidence` value (0 to 1) is shown in words:
+
+| Confidence | Shown as |
+| --- | --- |
+| 0.75 to 1 | Quite sure |
+| 0.50 to below 0.75 | Fairly sure |
+| 0.25 to below 0.50 | Not very sure |
+| 0 to below 0.25 | Barely sure |
 
 ## Local database
 

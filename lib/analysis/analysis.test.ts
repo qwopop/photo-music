@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import sharp from "sharp";
 import { describe, expect, it, vi } from "vitest";
-import { GET, POST } from "../../app/api/analyze/route";
+import { DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT } from "../../app/api/analyze/route";
 import { moodResultSchema, type MoodResult } from "../mood";
 import { extractPalette } from "../palette";
 import { TemporaryUploadStore } from "../upload/store";
@@ -93,6 +93,22 @@ describe("request validation", () => {
     const viaHandler = await handleAnalyze(new Request("http://localhost/api/analyze"), { analyze, consumeUpload: () => undefined, limiter: new RateLimiter() });
     expect(viaHandler.status).toBe(405);
     expect(viaHandler.headers.get("allow")).toBe("POST");
+  });
+
+  it.each([["GET", GET], ["PUT", PUT], ["PATCH", PATCH], ["DELETE", DELETE], ["OPTIONS", OPTIONS], ["HEAD", HEAD]])("route %s gives 405 with Allow: POST", (_m, handler) => {
+    const response = handler();
+    expect(response.status).toBe(405);
+    expect(response.headers.get("allow")).toBe("POST");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("handler gives 405 with Allow for any other method", async () => {
+    const { analyze } = setup();
+    for (const method of ["PUT", "PATCH", "DELETE", "OPTIONS"]) {
+      const response = await handleAnalyze(new Request("http://localhost/api/analyze", { method }), { analyze, consumeUpload: () => undefined, limiter: new RateLimiter() });
+      expect(response.status).toBe(405);
+      expect(response.headers.get("allow")).toBe("POST");
+    }
   });
 
   it("route POST without a valid body gives 400 and reads no environment", async () => {
