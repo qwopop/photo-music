@@ -39,6 +39,7 @@ function setup(responder: Responder, extra: SpotifySearchDeps = {}) {
     fetch: fetchFake as unknown as typeof fetch,
     getConfig: () => config,
     sleep,
+    now: () => 0,
     ...extra,
   });
   return { search, calls, sleep, fetchFake };
@@ -410,6 +411,7 @@ describe("errors are safe", () => {
     }
     errors.push(
       await createSpotifySearch({
+        now: () => 0,
         getConfig: () => {
           throw new Error(SECRET);
         },
