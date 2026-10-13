@@ -328,6 +328,100 @@ validating this shared module requires no Next runtime, API key, environment
 variable, database or network call. Provider integration and the analysis API
 remain separate tasks (#11 and #12).
 
+## Shared track and playlist contract
+
+Browser and server code import the same plain data contract for recommended
+tracks and playlists. It needs no Next runtime, environment variable,
+credential, database or network call, and it reuses `moodResultSchema` from
+`lib/mood` without copying it:
+
+```ts
+import {
+  PLAYLIST_LENGTHS, playlistSchema, playlistJsonSchema, trackSchema,
+  youtubeLinkSchema, playlistTrackSchema, PLAYLIST_EXAMPLES,
+  type PlaylistLength, type Track, type YouTubeLink, type PlaylistTrack, type Playlist,
+} from "@/lib/playlist";
+
+const playlist: Playlist = playlistSchema.parse(untrustedPlaylist);
+// Or use playlistSchema.safeParse(untrustedPlaylist) to inspect success/errors.
+```
+
+`PLAYLIST_LENGTHS` is `[5, 10, 20, 30]`. Types are inferred from the Zod
+schemas. All objects reject unknown properties, every field is required, and
+`null` is valid only for `album` and `coverImageUrl`.
+
+`Track` (what a music provider returns, `trackSchema`):
+
+| Field | Contract |
+| --- | --- |
+| `spotifyId` | Exactly 22 characters of `0-9A-Za-z`, case preserved |
+| `spotifyUrl` | Exactly `https://open.spotify.com/track/` plus this track's `spotifyId`; no query string, locale segment or other host |
+| `title` | 1–500 characters, with a non-whitespace character |
+| `artists` | 1–50 names in provider order, each 1–200 characters with a non-whitespace character |
+| `album` | 1–500 characters with a non-whitespace character, or `null` |
+| `durationMs` | Integer, 1–86,400,000 |
+| `coverImageUrl` | Absolute URL starting with `https://`, at most 2,048 characters, or `null` |
+
+`YouTubeLink` is `{ kind: "video", url }` with `https://www.youtube.com/watch?v=`
+and an 11-character ID (`A-Za-z0-9_-`), or `{ kind: "search", url }`, the
+fallback when no video was found, with `https://www.youtube.com/results?search_query=`
+and a non-empty query without whitespace, `&` or `#`. `kind` must match the URL.
+
+`PlaylistTrack` is a `Track` plus `youtube` (a `YouTubeLink`) and
+`matchReason` (1–300 characters, with a non-whitespace character, saying why the
+song could fit the photo's mood; an interpretation, not a fact).
+
+`Playlist` (`playlistSchema`):
+
+| Field | Contract |
+| --- | --- |
+| `mood` | The `MoodResult` the playlist was built from, detected or corrected by the user |
+| `requestedLength` | `5`, `10`, `20` or `30` |
+| `tracks` | 1 up to `requestedLength` playlist tracks in display order, with unique `spotifyId`s |
+| `featuredTrackId` | The `spotifyId` of one of the `tracks`; it counts toward `requestedLength` and need not be first |
+
+```json
+{
+  "mood": {
+    "primaryEmotion": "calm",
+    "secondaryMoods": [],
+    "explanation": "The soft evening light suggests a calm atmosphere.",
+    "confidence": 0
+  },
+  "requestedLength": 5,
+  "tracks": [
+    {
+      "spotifyId": "ExampleTrackId00000001",
+      "spotifyUrl": "https://open.spotify.com/track/ExampleTrackId00000001",
+      "title": "Example Song 1",
+      "artists": ["Example Artist"],
+      "album": null,
+      "durationMs": 181000,
+      "coverImageUrl": null,
+      "youtube": { "kind": "search", "url": "https://www.youtube.com/results?search_query=Example%20Song%201" },
+      "matchReason": "Its unhurried piano could suit the calm evening light."
+    }
+  ],
+  "featuredTrackId": "ExampleTrackId00000001"
+}
+```
+
+A playlist can be shorter than `requestedLength`, because a provider may return
+fewer real tracks and tracks are never invented. An empty list is invalid.
+
+`playlistJsonSchema` is the JSON-serializable draft-2020-12 JSON Schema
+generated from `playlistSchema` with Zod 4's `z.toJSONSchema`. It keeps the
+required fields, `additionalProperties: false`, the length values, both YouTube
+kinds, the patterns and the length, count and integer bounds. Four rules exist
+only in the Zod schema, because JSON Schema cannot express them: `spotifyUrl`
+matches `spotifyId`, track IDs are unique, `featuredTrackId` names a listed
+track, and `tracks` is no longer than `requestedLength`.
+
+Nothing is coerced, defaulted, trimmed or re-cased. `PLAYLIST_EXAMPLES` holds
+synthetic, schema-valid playlists with fictional titles, fake IDs and
+`example.com` covers. They are for tests and documentation only and must never
+be shown to users as recommendations.
+
 ## Configuration
 
 Settings such as the database URL and API keys come from environment variables. One server-only module, `lib/config`, reads and validates them. It has one getter per feature: `getDatabaseConfig()`, `getVisionConfig()`, `getSpotifyConfig()`, `getYouTubeConfig()` and `getStorageConfig()`. [`.env.example`](.env.example) lists every variable, with what it is, which feature needs it, where to get it, and its format.
