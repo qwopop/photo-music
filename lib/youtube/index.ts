@@ -1,4 +1,6 @@
-import { youtubeLinkSchema, type Track, type YouTubeLink } from "../playlist";
+import { trackSchema, youtubeLinkSchema, type YouTubeLink } from "../playlist";
+
+type Track = typeof trackSchema._output;
 
 /**
  * What the recommendation engine (#20) needs. #20 has not landed yet; its
@@ -139,17 +141,19 @@ export function createYouTubeResolver(options: YouTubeResolverOptions): VideoLin
       fields: "items(id/videoId,snippet(title,channelTitle))",
       key: apiKey,
     });
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    const signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+    let onTimeout: (() => void) | undefined;
     const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => {
-        controller.abort();
+      if (signal.aborted) {
         reject(new Error("timeout"));
-      }, REQUEST_TIMEOUT_MS);
+        return;
+      }
+      onTimeout = () => reject(new Error("timeout"));
+      signal.addEventListener("abort", onTimeout, { once: true });
     });
     try {
       const work = (async (): Promise<Outcome> => {
-        const response = await doFetch(`${SEARCH_URL}?${params}`, { signal: controller.signal });
+        const response = await doFetch(`${SEARCH_URL}?${params}`, { signal });
         if (!response.ok) return { type: "error", quota: await quotaReason(response) };
         const body: unknown = await response.json();
         if (!isRecord(body) || !Array.isArray(body.items)) return { type: "error", quota: false };
@@ -162,7 +166,7 @@ export function createYouTubeResolver(options: YouTubeResolverOptions): VideoLin
     } catch {
       return { type: "error", quota: false };
     } finally {
-      clearTimeout(timer);
+      if (onTimeout) signal.removeEventListener("abort", onTimeout);
     }
   }
 

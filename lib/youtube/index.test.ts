@@ -28,7 +28,7 @@ function track(title = "Blinding Lights", artist = "The Weeknd", n = 1): Track {
   };
 }
 
-type Responder = () => Response | Promise<Response>;
+type Responder = (url: string, init?: RequestInit) => Response | Promise<Response>;
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -56,8 +56,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function make(responder: (url: string) => Response | Promise<Response>) {
-  const fetchMock = vi.fn(async (input: string | URL | Request) => responder(String(input)));
+function make(responder: Responder) {
+  const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) =>
+    responder(String(input), init),
+  );
   const resolver = createYouTubeResolver({
     apiKey: KEY,
     fetch: fetchMock as unknown as typeof fetch,
@@ -106,6 +108,14 @@ describe("request", () => {
 
   it("treats a request that never answers as a failure after 4 s", async () => {
     vi.useFakeTimers();
+    vi.spyOn(AbortSignal, "timeout").mockImplementation((milliseconds) => {
+      const controller = new AbortController();
+      setTimeout(
+        () => controller.abort(new DOMException("The operation timed out", "TimeoutError")),
+        milliseconds,
+      );
+      return controller.signal;
+    });
     const { resolver, fetchMock } = make(() => new Promise<Response>(() => {}));
     const pending = resolver.resolve(track());
     let settled = false;
@@ -115,6 +125,8 @@ describe("request", () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(settled).toBe(true);
     expectSearchLink(await pending);
+    expect(AbortSignal.timeout).toHaveBeenCalledWith(4_000);
+    expect(fetchMock.mock.calls[0][1]?.signal?.aborted).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const again = resolver.resolve(track()); // errors are not cached
     await vi.advanceTimersByTimeAsync(4_000);
