@@ -83,6 +83,17 @@ export class TemporaryUploadStore {
     return { ...entry.image, size: entry.image.bytes.length };
   }
 
+  /** Non-consuming read, so a failed save can be retried with the same handle. Invalid/expired IDs return undefined. */
+  peek(id: string): ConsumedUpload | undefined {
+    const entry = this.entries.get(id);
+    if (!entry) return undefined;
+    if (entry.expiresAt <= this.now()) {
+      this.release(id);
+      return undefined;
+    }
+    return { ...entry.image, size: entry.image.bytes.length };
+  }
+
   /** Idempotent removal; safe for unknown, already consumed, released, or expired IDs. */
   release(id: string): void {
     const entry = this.entries.get(id);
