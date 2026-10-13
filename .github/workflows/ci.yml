@@ -113,7 +113,7 @@ jobs:
 
   storage:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     env:
       S3_ENDPOINT: http://localhost:9000
       S3_REGION: us-east-1
@@ -130,8 +130,8 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci
-      - name: Start private MinIO bucket
-        run: docker compose up -d --wait minio minio-init
+      - name: Build and start private MinIO bucket
+        run: docker compose up -d --build --wait minio minio-init
       - name: Run real S3 tests
         run: npm run test:s3
       - name: Show storage logs

@@ -738,7 +738,11 @@ hands out presigned GET URLs that last 300 seconds by default and at most
 ### Local MinIO and real S3 tests
 
 `docker compose up -d --wait` starts MinIO alongside PostgreSQL, with S3 on
-`127.0.0.1:9000` and its console on `127.0.0.1:9001`. The initializer creates
+`127.0.0.1:9000` and its console on `127.0.0.1:9001`. Use Docker Compose
+2.17 or newer (inline Dockerfile support). The first start builds MinIO and
+its client from official release sources pinned to verified Git commits;
+subsequent starts reuse Docker's build cache. Builds retain Go module checksum
+verification and use two compiler workers to limit memory use. The initializer creates
 `photo-music-photos` and explicitly disables anonymous access. The credentials
 below are local development defaults; use separate restricted keys in production.
 Put these values in `.env.local`:
