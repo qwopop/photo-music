@@ -581,6 +581,40 @@ synthetic, schema-valid playlists with fictional titles, fake IDs and
 `example.com` covers. They are for tests and documentation only and must never
 be shown to users as recommendations.
 
+## Playlist recommendation
+
+`recommendPlaylist(mood, preferences, deps)` in `lib/recommend` returns a
+`Playlist` (the shared contract above). It reads no environment variable, opens
+no connection and calls no vision code; it reuses the stored `MoodResult`.
+The caller passes the real providers (Spotify #17, YouTube #18) as `deps`:
+
+- `TrackSearch.search(query: TrackQuery): Promise<unknown[]>`, where `TrackQuery`
+  is `{ text, genre?, artist?, languages, limit }`
+- `VideoLinkResolver.resolve(track: Track): Promise<unknown>`
+
+Only tracks the search returned are used, and each is checked with
+`trackSchema`; invalid ones are dropped, never repaired.
+
+Query rules (from `buildSearchCriteria`): at most 6 searches with `limit` 20.
+One per each of the top 3 genres (`text` = first two keywords) and one per each
+of the first 3 preference artists (`text` = the artist). A search that fails or
+takes over 10 s counts as failed; the rest are still used.
+
+Ranking: a track's score is the sum of the weights of the queries that returned
+it (a genre query weighs its genre's weight, an artist query weighs 0.3 divided
+by the number of artist queries), plus 1 if one of its artists is a preference
+artist. Ties go to the earlier query, then earlier position, then `spotifyId`.
+Duplicates (same `spotifyId`, or same lowercased title and first artist) keep
+the earliest. At most 2 tracks per first artist, unless too few remain. The
+playlist has `min(length, valid unique tracks)` tracks and the top one is
+featured. Each track gets a tentative `matchReason` ("May suit a ... mood").
+
+YouTube: `resolve` is called once per chosen track; if it throws, answers
+something invalid or takes over 5 s, the track gets a search link.
+
+Errors: `RecommendError` with code `SEARCH_UNAVAILABLE` (every search failed) or
+`NO_TRACKS` (no valid candidates), a fixed message and no cause.
+
 ## Configuration
 
 Settings such as the database URL and API keys come from environment variables. One server-only module, `lib/config`, reads and validates them. It has one getter per feature: `getDatabaseConfig()`, `getVisionConfig()`, `getSpotifyConfig()`, `getYouTubeConfig()` and `getStorageConfig()`. [`.env.example`](.env.example) lists every variable, with what it is, which feature needs it, where to get it, and its format.
