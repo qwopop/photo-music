@@ -579,6 +579,28 @@ The deployment-wide limiter and proxy boundary are revisited in issues #33
 and #48.
 
 
+## Results demo
+
+Open `/results/demo` for a fixture-only results view; it needs no API key,
+database or network. Query parameters select examples:
+
+| Parameter | Values | Default |
+| --- | --- | --- |
+| `mood` | `happy`, `sad`, `calm`, `energetic`, `romantic` | `happy` |
+| `palette` | `bright`, `dark`, `solid` | `bright` |
+| `stress` | `1` for the long-text fixture | off |
+
+Confidence is shown in words: below 0.4 is **Not very sure**, 0.4–<0.7 is
+**Somewhat sure**, 0.7–<0.9 is **Fairly sure**, and 0.9 or higher is
+**Very sure**.
+
+| Confidence | Words |
+| --- | --- |
+| Below 0.4 | Not very sure |
+| 0.4 to below 0.7 | Somewhat sure |
+| 0.7 to below 0.9 | Fairly sure |
+| 0.9 and above | Very sure |
+
 ## Configuration
 
 Settings such as the database URL and API keys come from environment variables. One server-only module, `lib/config`, reads and validates them. It has one getter per feature: `getDatabaseConfig()`, `getVisionConfig()`, `getSpotifyConfig()`, `getYouTubeConfig()` and `getStorageConfig()`. [`.env.example`](.env.example) lists every variable, with what it is, which feature needs it, where to get it, and its format.
