@@ -100,7 +100,7 @@ describe("weights", () => {
     const g = w(c);
     near(g.pop, 0.2 + 0.15 + 0.1 / 3);
     near(g.rock, 0.15 + 0.1 / 3);
-    near(g.electronic, 0.2 + 0.2 / 3);
+    near(g.electronic, 0.2 + 0.1 / 3);
     near(g.indie, 0.2);
     expect(c.genres[0].genre).toBe("pop");
     near(c.genres.reduce((s, x) => s + x.weight, 0), 1);
