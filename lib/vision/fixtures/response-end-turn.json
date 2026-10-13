@@ -1,0 +1,19 @@
+{
+  "id": "msg_fixture",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-opus-5-5",
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"primaryEmotion\":\"calm\",\"secondaryMoods\":[\"quiet\",\"soft light\"],\"explanation\":\"The soft evening light suggests a calm atmosphere.\",\"confidence\":0.7}"
+    }
+  ],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "stop_details": null,
+  "usage": {
+    "input_tokens": 1200,
+    "output_tokens": 80
+  }
+}
