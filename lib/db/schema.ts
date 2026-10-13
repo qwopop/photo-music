@@ -17,6 +17,7 @@ import { sql, type SQL } from "drizzle-orm";
 import {
   boolean,
   check,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -65,69 +66,90 @@ export const sessions = pgTable(
 );
 
 /**
- * A saved photo. Holds the storage key (`users/<userId>/<uuid>.<ext>`), never
- * image bytes. `save_id` is the client-generated idempotency key.
+ * A saved photo. Holds the storage key from `lib/storage`
+ * (`users/<userId>/<uuid>.<ext>`), never image bytes or a URL. `save_id` is
+ * the client-generated key that makes a save idempotent.
  */
 export const photos = pgTable(
   "photos",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-    storageKey: text("storage_key").notNull().unique(),
-    // A `PaletteResult` from lib/palette.
-    palette: jsonb("palette").notNull(),
+    storageKey: text("storage_key").notNull().unique("photos_storage_key_key"),
     saveId: uuid("save_id").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     unique("photos_user_id_save_id_key").on(table.userId, table.saveId),
-    index("photos_user_id_created_at_idx").on(table.userId, table.createdAt.desc(), table.id.desc()),
+    index("photos_user_id_created_at_id_idx").on(table.userId, table.createdAt.desc(), table.id.desc()),
   ],
 );
 
-/** The mood of a photo: one per photo. */
+/** The mood analysis of a photo (one per photo), with its palette and the preferences used. */
 export const analyses = pgTable(
   "analyses",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    photoId: uuid("photo_id").notNull().unique().references(() => photos.id, { onDelete: "cascade" }),
-    // A `MoodResult` from lib/mood.
-    mood: jsonb("mood").notNull(),
+    photoId: uuid("photo_id").notNull().references(() => photos.id, { onDelete: "cascade" }).unique("analyses_photo_id_key"),
+    primaryEmotion: text("primary_emotion").notNull(),
+    // A list of up to 3 strings.
+    secondaryMoods: jsonb("secondary_moods").notNull(),
+    explanation: text("explanation").notNull(),
+    confidence: doublePrecision("confidence").notNull(),
     moodCorrected: boolean("mood_corrected").notNull().default(false),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [index("analyses_photo_id_idx").on(table.photoId)],
-);
-
-/** One generated playlist; regenerations add more rows for the same analysis. */
-export const playlists = pgTable(
-  "playlists",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    analysisId: uuid("analysis_id").notNull().references(() => analyses.id, { onDelete: "cascade" }),
-    requestedLength: integer("requested_length").notNull(),
-    featuredSpotifyId: text("featured_spotify_id").notNull(),
-    // A `Preferences` from lib/preferences.
+    // `{ colors: string[], brightness: number }`, the PaletteResult of lib/palette.
+    palette: jsonb("palette").notNull(),
+    // The `Preferences` of lib/preferences used for the playlist.
     preferences: jsonb("preferences").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    index("playlists_analysis_id_idx").on(table.analysisId),
+    check(
+      "analyses_primary_emotion_check",
+      sql`${table.primaryEmotion} in ('happy', 'sad', 'calm', 'energetic', 'romantic')`,
+    ),
+    check("analyses_confidence_check", sql`${table.confidence} >= 0 and ${table.confidence} <= 1`),
+  ],
+);
+
+/** A generated playlist of a photo. */
+export const playlists = pgTable(
+  "playlists",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    photoId: uuid("photo_id").notNull().references(() => photos.id, { onDelete: "cascade" }),
+    requestedLength: integer("requested_length").notNull(),
+    featuredSpotifyId: text("featured_spotify_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("playlists_photo_id_idx").on(table.photoId),
     check("playlists_requested_length_check", sql`${table.requestedLength} in (5, 10, 20, 30)`),
   ],
 );
 
+/** The tracks of a playlist: every field of `playlistTrackSchema`. */
 export const playlistTracks = pgTable(
   "playlist_tracks",
   {
     playlistId: uuid("playlist_id").notNull().references(() => playlists.id, { onDelete: "cascade" }),
     position: integer("position").notNull(),
     spotifyId: text("spotify_id").notNull(),
-    // A `PlaylistTrack` from lib/playlist.
-    track: jsonb("track").notNull(),
+    spotifyUrl: text("spotify_url").notNull(),
+    title: text("title").notNull(),
+    // A list of artist names.
+    artists: jsonb("artists").notNull(),
+    album: text("album"),
+    durationMs: integer("duration_ms").notNull(),
+    coverImageUrl: text("cover_image_url"),
+    youtubeKind: text("youtube_kind").notNull(),
+    youtubeUrl: text("youtube_url").notNull(),
+    matchReason: text("match_reason").notNull(),
   },
   (table) => [
+    // The primary key's index also serves lookups by playlist_id.
     primaryKey({ columns: [table.playlistId, table.position] }),
     unique("playlist_tracks_playlist_id_spotify_id_key").on(table.playlistId, table.spotifyId),
+    check("playlist_tracks_youtube_kind_check", sql`${table.youtubeKind} in ('video', 'search')`),
   ],
 );

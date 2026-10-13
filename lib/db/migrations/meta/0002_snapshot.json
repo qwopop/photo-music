@@ -1,5 +1,5 @@
 {
-  "id": "293b48ce-69c6-4025-b347-0e1f3e1b1640",
+  "id": "335dd329-0b66-44e0-b18d-71d53e966a00",
   "prevId": "c86c0522-0fa2-437b-a47f-ba35b2ac313f",
   "version": "7",
   "dialect": "postgresql",
@@ -21,9 +21,27 @@
           "primaryKey": false,
           "notNull": true
         },
-        "mood": {
-          "name": "mood",
+        "primary_emotion": {
+          "name": "primary_emotion",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "secondary_moods": {
+          "name": "secondary_moods",
           "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "explanation": {
+          "name": "explanation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "confidence": {
+          "name": "confidence",
+          "type": "double precision",
           "primaryKey": false,
           "notNull": true
         },
@@ -34,6 +52,18 @@
           "notNull": true,
           "default": false
         },
+        "palette": {
+          "name": "palette",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "preferences": {
+          "name": "preferences",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -42,23 +72,7 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "analyses_photo_id_idx": {
-          "name": "analyses_photo_id_idx",
-          "columns": [
-            {
-              "expression": "photo_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "analyses_photo_id_photos_id_fk": {
           "name": "analyses_photo_id_photos_id_fk",
@@ -76,8 +90,8 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "analyses_photo_id_unique": {
-          "name": "analyses_photo_id_unique",
+        "analyses_photo_id_key": {
+          "name": "analyses_photo_id_key",
           "nullsNotDistinct": false,
           "columns": [
             "photo_id"
@@ -85,7 +99,16 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "analyses_primary_emotion_check": {
+          "name": "analyses_primary_emotion_check",
+          "value": "\"analyses\".\"primary_emotion\" in ('happy', 'sad', 'calm', 'energetic', 'romantic')"
+        },
+        "analyses_confidence_check": {
+          "name": "analyses_confidence_check",
+          "value": "\"analyses\".\"confidence\" >= 0 and \"analyses\".\"confidence\" <= 1"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.photos": {
@@ -111,12 +134,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "palette": {
-          "name": "palette",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
         "save_id": {
           "name": "save_id",
           "type": "uuid",
@@ -132,8 +149,8 @@
         }
       },
       "indexes": {
-        "photos_user_id_created_at_idx": {
-          "name": "photos_user_id_created_at_idx",
+        "photos_user_id_created_at_id_idx": {
+          "name": "photos_user_id_created_at_id_idx",
           "columns": [
             {
               "expression": "user_id",
@@ -177,8 +194,8 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "photos_storage_key_unique": {
-          "name": "photos_storage_key_unique",
+        "photos_storage_key_key": {
+          "name": "photos_storage_key_key",
           "nullsNotDistinct": false,
           "columns": [
             "storage_key"
@@ -219,9 +236,57 @@
           "primaryKey": false,
           "notNull": true
         },
-        "track": {
-          "name": "track",
+        "spotify_url": {
+          "name": "spotify_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "artists": {
+          "name": "artists",
           "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "album": {
+          "name": "album",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "duration_ms": {
+          "name": "duration_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cover_image_url": {
+          "name": "cover_image_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "youtube_kind": {
+          "name": "youtube_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "youtube_url": {
+          "name": "youtube_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "match_reason": {
+          "name": "match_reason",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         }
@@ -262,7 +327,12 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "playlist_tracks_youtube_kind_check": {
+          "name": "playlist_tracks_youtube_kind_check",
+          "value": "\"playlist_tracks\".\"youtube_kind\" in ('video', 'search')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.playlists": {
@@ -276,8 +346,8 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "analysis_id": {
-          "name": "analysis_id",
+        "photo_id": {
+          "name": "photo_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -294,12 +364,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "preferences": {
-          "name": "preferences",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -309,11 +373,11 @@
         }
       },
       "indexes": {
-        "playlists_analysis_id_idx": {
-          "name": "playlists_analysis_id_idx",
+        "playlists_photo_id_idx": {
+          "name": "playlists_photo_id_idx",
           "columns": [
             {
-              "expression": "analysis_id",
+              "expression": "photo_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -326,12 +390,12 @@
         }
       },
       "foreignKeys": {
-        "playlists_analysis_id_analyses_id_fk": {
-          "name": "playlists_analysis_id_analyses_id_fk",
+        "playlists_photo_id_photos_id_fk": {
+          "name": "playlists_photo_id_photos_id_fk",
           "tableFrom": "playlists",
-          "tableTo": "analyses",
+          "tableTo": "photos",
           "columnsFrom": [
-            "analysis_id"
+            "photo_id"
           ],
           "columnsTo": [
             "id"
