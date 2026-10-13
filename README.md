@@ -505,6 +505,49 @@ synthetic, schema-valid playlists with fictional titles, fake IDs and
 `example.com` covers. They are for tests and documentation only and must never
 be shown to users as recommendations.
 
+## Photo mood analysis
+
+`lib/vision` (server-only, `@/lib/vision`) turns a photo into a validated `MoodResult`:
+
+```ts
+import { analyzePhotoMood, createClaudeVisionClient, VisionError } from "@/lib/vision";
+
+// Create the client while handling a request: it reads VISION_API_KEY then.
+try {
+  const mood = await analyzePhotoMood(photoBytes, createClaudeVisionClient());
+} catch (error) {
+  if (error instanceof VisionError) console.warn(error.code); // never the provider's text
+}
+```
+
+`analyzePhotoMood` first runs the upload policy (`validateImage`: JPEG, static PNG or WebP, at most 10 MiB and 25 MP, so also no APNG), then sends a prepared copy to the client, then checks the answer with the shared `moodResultSchema` and returns it unchanged. Importing the module reads no environment variable and makes no connection.
+
+**Prepared image.** The client never sees the original bytes. The copy is a new JPEG (quality 85, lower only if the base64 would exceed 5 MB): EXIF orientation applied, the first frame only, at most 1568 px on the long side (never enlarged), transparency flattened onto white (`#ffffff`), and no EXIF, GPS, XMP or IPTC metadata.
+
+**Faking the client in tests.** `VisionClient` has one method, `analyze(image: { bytes: Buffer; mediaType: "image/jpeg" }): Promise<unknown>`, which returns the provider's parsed answer. A fake is enough:
+
+```ts
+const fake: VisionClient = { analyze: async () => MOOD_EXAMPLES[0] };
+await analyzePhotoMood(photoBytes, fake);
+```
+
+To test the real client without a key or network, inject `fetch` (and a shorter `timeoutMs`): `createClaudeVisionClient({ fetch, timeoutMs: 50 })`, with `vi.stubEnv("VISION_API_KEY", "...")`. The recorded Messages API responses in `lib/vision/fixtures/` are hand-written; a check against the live API is issue #39.
+
+**Provider and request.** Anthropic's Claude API through `@anthropic-ai/sdk` (pinned to 0.131.0), one `client.beta.messages.parse` call to `https://api.anthropic.com/v1/messages` with model `claude-opus-5-5`, `output_config.effort` `"low"`, `max_tokens` 4096, server-side refusal fallback (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`) and a JSON output format derived from `moodResultSchema`. It sends one user message: the image, then the fixed `MOOD_PROMPT`. It sends no sampling parameters, no `thinking`, no tools and no prefill. The SDK gets explicit settings (`apiKey` from `VISION_API_KEY` through `lib/config`, `baseURL`, `logLevel: "off"`, `maxRetries: 1`), so its own `ANTHROPIC_*` variables are ignored, and only the API key header is sent as a credential. Each attempt times out after 30 s; a transient failure (429, 5xx, connection error, timeout) is retried once, so one analysis makes at most two requests. A refused or malformed answer is never requested again.
+
+**Errors.** `VisionError` has only a stable `code` and a fixed message, no `cause`, and nothing from the provider.
+
+| Code | Cause |
+| --- | --- |
+| `INVALID_IMAGE` | Empty, unsupported (such as GIF), corrupt or truncated image |
+| `FILE_TOO_LARGE` | More than 10 MiB |
+| `VISION_NOT_CONFIGURED` | `VISION_API_KEY` unset or blank, or the provider answered 401 or 403 |
+| `VISION_UNAVAILABLE` | Any other HTTP error, a connection failure, a timeout, or a client that threw something else |
+| `VISION_REFUSED` | Claude refused (`stop_reason: "refusal"`) |
+| `VISION_BAD_RESPONSE` | Cut-off output (`max_tokens`), no text block, text that is not JSON, or JSON that fails `moodResultSchema` |
+
+**Privacy.** Only the downscaled copy without metadata goes to Anthropic's API. The module stores nothing and logs nothing: no image data, no provider output, no key. The HTTP endpoint that maps these codes to statuses is issue #12.
+
 ## Configuration
 
 Settings such as the database URL and API keys come from environment variables. One server-only module, `lib/config`, reads and validates them. It has one getter per feature: `getDatabaseConfig()`, `getVisionConfig()`, `getSpotifyConfig()`, `getYouTubeConfig()` and `getStorageConfig()`. [`.env.example`](.env.example) lists every variable, with what it is, which feature needs it, where to get it, and its format.
