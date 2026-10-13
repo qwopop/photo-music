@@ -327,6 +327,7 @@ claim about a person's feelings or a calibrated guarantee. Importing or
 validating this shared module requires no Next runtime, API key, environment
 variable, database or network call. Provider integration and the analysis API
 remain separate tasks (#11 and #12).
+
 ## Music preferences
 
 `lib/preferences` is a plain, browser-safe module (no environment variable, no
@@ -352,7 +353,6 @@ the query string with repeated keys; values equal to the default are left out:
 
 `parsePreferences` never throws: unknown keys and ids are ignored and invalid
 values fall back to the defaults.
-
 
 ## Shared track and playlist contract
 
