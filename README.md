@@ -618,7 +618,7 @@ docker compose exec db psql -U photo_music -d photo_music
 
 ## Database schema and migrations
 
-The tables are defined with [Drizzle ORM](https://orm.drizzle.team/) in TypeScript, in [`lib/db/schema.ts`](lib/db/schema.ts). So far there is one table, `users`. Every change to the tables is a plain SQL migration in [`lib/db/migrations/`](lib/db/migrations), which `drizzle-kit generate` writes and which is committed. App code gets the database from `getDb()` in `lib/db`, only while handling a request (see the Rules in [`AGENTS.md`](AGENTS.md)).
+The tables are defined with [Drizzle ORM](https://orm.drizzle.team/) in TypeScript, in [`lib/db/schema.ts`](lib/db/schema.ts). The tables are `users`, `sessions` and the saved-results tables (see [Saved results](#saved-results)). Every change to the tables is a plain SQL migration in [`lib/db/migrations/`](lib/db/migrations), which `drizzle-kit generate` writes and which is committed. App code gets the database from `getDb()` in `lib/db`, only while handling a request (see the Rules in [`AGENTS.md`](AGENTS.md)).
 
 Apply the pending migrations to the database in `DATABASE_URL`. Run this after starting the database, and after pulling new migrations:
 
@@ -703,6 +703,25 @@ The `database` job:
 - It sets only `DATABASE_URL`, to the local URL from `.env.example`, which is not a secret. It uses no secrets.
 
 See the results in the repository's [Actions tab](https://github.com/qwopop/photo-music/actions/workflows/ci.yml), or in the `CI` check shown next to each commit and on each pull request.
+
+## Saved results
+
+Signed-in users' saved results live in four tables in [`lib/db/schema.ts`](lib/db/schema.ts), all removed together with the user (every foreign key is `ON DELETE CASCADE`):
+
+- `photos`: `id`, `user_id`, `storage_key` (the key from `lib/storage`, never a URL), `save_id` and `created_at`. `(user_id, save_id)` and `storage_key` are unique.
+- `analyses`: one per photo: the mood (`primary_emotion`, `secondary_moods`, `explanation`, `confidence`), `mood_corrected`, `palette` and the `preferences` used.
+- `playlists`: `photo_id`, `requested_length` (5, 10, 20 or 30) and `featured_spotify_id`.
+- `playlist_tracks`: the tracks of a playlist, in `position` order, with every field of a playlist track.
+
+The repository in [`lib/db/photo-results.ts`](lib/db/photo-results.ts) takes `userId` first and scopes by it in SQL. The last argument is the database, `getDb()` by default.
+
+- `savePhotoResult(userId, { saveId, storageKey, mood, moodCorrected, palette, preferences, playlist })` validates the input, writes everything in one transaction and returns `{ id, created }`. Calling it again with the same `saveId` returns the existing id with `created: false`.
+- `getPhotoResult(userId, id)` returns the result, or `null` for an unknown id and for another user's id.
+- `listPhotoResults(userId, { limit?, cursor? })` returns `{ items, nextCursor }`, newest first (default limit 20, maximum 100).
+- `deletePhotoResult(userId, id)` deletes a result with its analysis, playlists and tracks, and returns its storage key (or `null`).
+
+Failures are `PhotoResultError`s with a `code` and a fixed message; database error messages are never passed on.
+
 
 ## Photo storage
 
