@@ -533,7 +533,7 @@ await analyzePhotoMood(photoBytes, fake);
 
 To test the real client without a key or network, inject `fetch` (and a shorter `timeoutMs`): `createClaudeVisionClient({ fetch, timeoutMs: 50 })`, with `vi.stubEnv("VISION_API_KEY", "...")`. The recorded Messages API responses in `lib/vision/fixtures/` are hand-written; a check against the live API is issue #39.
 
-**Provider and request.** Anthropic's Claude API through `@anthropic-ai/sdk` (pinned to 0.131.0), one `client.beta.messages.parse` call to `https://api.anthropic.com/v1/messages` with model `claude-opus-5-5`, `output_config.effort` `"low"`, `max_tokens` 4096, server-side refusal fallback (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`) and a JSON output format derived from `moodResultSchema`. It sends one user message: the image, then the fixed `MOOD_PROMPT`. It sends no sampling parameters, no `thinking`, no tools and no prefill. The SDK gets explicit settings (`apiKey` from `VISION_API_KEY` through `lib/config`, `baseURL`, `logLevel: "off"`, `maxRetries: 1`), so its own `ANTHROPIC_*` variables are ignored, and only the API key header is sent as a credential. Each attempt times out after 30 s; a transient failure (429, 5xx, connection error, timeout) is retried once, so one analysis makes at most two requests. A refused or malformed answer is never requested again.
+**Provider and request.** Anthropic's Claude API through `@anthropic-ai/sdk` (pinned to 0.131.0), one `client.beta.messages.parse` call to `https://api.anthropic.com/v1/messages` with model `claude-opus-5-5`, `output_config.effort` `"low"`, `max_tokens` 4096, server-side refusal fallback (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`) and a JSON output format derived from `moodResultSchema`. It sends one user message: the image, then the fixed `MOOD_PROMPT`. It sends no sampling parameters, no `thinking`, no tools and no prefill. The SDK gets explicit settings (`apiKey` from `VISION_API_KEY` through `lib/config`, `baseURL`, `logLevel: "off"`, `maxRetries: 0`), so its own `ANTHROPIC_*` variables are ignored, and only the API key header is sent as a credential. Each attempt times out after 30 s; the module retries a transient failure (429, 5xx, connection error, timeout) once, so one analysis makes at most two requests. Other 4xx responses, including 408 and 409, are not retried. A refused or malformed answer is never requested again.
 
 **Errors.** `VisionError` has only a stable `code` and a fixed message, no `cause`, and nothing from the provider.
 
@@ -547,6 +547,65 @@ To test the real client without a key or network, inject `fetch` (and a shorter 
 | `VISION_BAD_RESPONSE` | Cut-off output (`max_tokens`), no text block, text that is not JSON, or JSON that fails `moodResultSchema` |
 
 **Privacy.** Only the downscaled copy without metadata goes to Anthropic's API. The module stores nothing and logs nothing: no image data, no provider output, no key. The HTTP endpoint that maps these codes to statuses is issue #12.
+
+## Photo analysis endpoint
+
+`POST /api/analyze` accepts `application/json` with exactly one property:
+`{ "upload": "<handle>" }`. The UTF-8 request body is limited to 1,024 bytes.
+The handle comes from `POST /api/upload`, is consumed before analysis, and can
+be used only once; an empty, unknown, expired or previously used handle returns 404. A
+successful response is `{ "mood": MoodResult, "palette": PaletteResult }`.
+Every response is `Cache-Control: no-store`.
+
+| Status | Code | Cause |
+| --- | --- | --- |
+| 400 | `INVALID_REQUEST` | Non-JSON, malformed, oversized, missing or extra request fields |
+| 404 | `UPLOAD_NOT_FOUND` | Empty, unknown, expired or already consumed upload handle |
+| 415 | `INVALID_IMAGE` | Invalid image contents |
+| 413 | `FILE_TOO_LARGE` | Image exceeds 10 MiB |
+| 422 | `NO_VISIBLE_PIXELS` | Image has no visible pixels |
+| 422 | `VISION_REFUSED` | The vision provider refused the photo |
+| 429 | `RATE_LIMITED` | More than 10 valid requests from one IP in a rolling 10-minute window; includes a whole-seconds `Retry-After` header |
+| 502 | `VISION_BAD_RESPONSE` | The provider returned an unusable answer |
+| 503 | `VISION_UNAVAILABLE` | The provider is temporarily unavailable |
+| 503 | `VISION_NOT_CONFIGURED` | The server has no vision API key configured |
+| 500 | `ANALYSIS_FAILED` | An unexpected internal failure |
+| 405 | — | Any method other than `POST`; response allows only `POST` |
+
+The in-memory rate limiter uses the first `X-Forwarded-For` entry. Trust that
+header only behind a proxy that sets it; direct clients can otherwise spoof
+the value. A missing or blank first entry uses the shared `unknown` bucket.
+The deployment-wide limiter and proxy boundary are revisited in issues #33
+and #48.
+
+
+## Results demo
+
+Open `/results/demo` for a fixture-only results view; it needs no API key,
+database or network. Query parameters select examples:
+
+| Parameter | Values | Default |
+| --- | --- | --- |
+| `mood` | `happy`, `sad`, `calm`, `energetic`, `romantic` | `happy` |
+| `palette` | `bright`, `dark`, `solid` | `bright` |
+| `stress` | `1` for the long-text fixture | off |
+
+Confidence is shown in words: below 0.4 is **Not very sure**, 0.4–<0.7 is
+**Somewhat sure**, 0.7–<0.9 is **Fairly sure**, and 0.9 or higher is
+**Very sure**.
+
+| Confidence | Words |
+| --- | --- |
+| Below 0.4 | Not very sure |
+| 0.4 to below 0.7 | Somewhat sure |
+| 0.7 to below 0.9 | Fairly sure |
+| 0.9 and above | Very sure |
+
+## Local mood correction
+
+The results demo offers “Correct the mood”: choose one primary emotion and up to three secondary tags, then Apply. Unknown original tags can be kept or removed. Apply keeps the original explanation and confidence because they describe the original vision reading. Reset restores that reading. Corrections live only in client state and never call vision or save anything.
+
+The mounted demo Regenerate callback receives the currently applied `MoodResult`, including corrected tags; it reports the requested mood without generating recommendations. Real recommendation generation belongs to #22 and #45.
 
 ## Configuration
 

@@ -174,7 +174,7 @@ describe("createClaudeVisionClient", () => {
       expect(captured).toHaveLength(1);
     });
 
-    it.each([400, 404, 413])("maps %i to VISION_UNAVAILABLE and does not retry", async (status) => {
+    it.each([400, 404, 408, 409, 413, 422])("maps %i to VISION_UNAVAILABLE and does not retry", async (status) => {
       const { result, captured } = run([{ status, body: { type: "error", error: { type: "invalid_request_error", message: "no" } } }]);
       expect(await codeOf(result)).toBe("VISION_UNAVAILABLE");
       expect(captured).toHaveLength(1);
