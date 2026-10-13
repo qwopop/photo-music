@@ -601,6 +601,12 @@ Confidence is shown in words: below 0.4 is **Not very sure**, 0.4–<0.7 is
 | 0.7 to below 0.9 | Fairly sure |
 | 0.9 and above | Very sure |
 
+## Local mood correction
+
+The results demo offers “Correct the mood”: choose one primary emotion and up to three secondary tags, then Apply. Unknown original tags can be kept or removed. Apply keeps the original explanation and confidence because they describe the original vision reading. Reset restores that reading. Corrections live only in client state and never call vision or save anything.
+
+The mounted demo Regenerate callback receives the currently applied `MoodResult`, including corrected tags; it reports the requested mood without generating recommendations. Real recommendation generation belongs to #22 and #45.
+
 ## Configuration
 
 Settings such as the database URL and API keys come from environment variables. One server-only module, `lib/config`, reads and validates them. It has one getter per feature: `getDatabaseConfig()`, `getVisionConfig()`, `getSpotifyConfig()`, `getYouTubeConfig()` and `getStorageConfig()`. [`.env.example`](.env.example) lists every variable, with what it is, which feature needs it, where to get it, and its format.

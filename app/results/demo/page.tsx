@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import demoPhoto from "../fixtures/demo-photo.svg";
-import { MoodView } from "../mood-view";
+import { DemoMoodView } from "./demo-mood-view";
 import styles from "./page.module.css";
 import { selectDemoFixture } from "./fixtures";
 
@@ -27,7 +27,7 @@ export default async function DemoPage({ searchParams }: DemoPageProps) {
 
   return (
     <main className={styles.main}>
-      <MoodView
+      <DemoMoodView
         mood={mood}
         palette={palette}
         photo={{
