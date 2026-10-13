@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { moodResultSchema } from "../mood";
+import { preferencesSchema } from "../preferences";
 
 /** Playlist sizes the user can choose (plan decision 8). */
 export const PLAYLIST_LENGTHS = [5, 10, 20, 30] as const;
@@ -63,11 +64,15 @@ export const playlistSchema = z
   .strictObject({
     mood: moodResultSchema,
     requestedLength: playlistLengthSchema,
+    preferences: preferencesSchema,
     tracks: z.array(playlistTrackSchema).min(1),
     featuredTrackId: z.string(),
   })
   .superRefine((playlist, ctx) => {
     // Zod-only rules: JSON Schema cannot express these.
+    if (playlist.preferences.length !== playlist.requestedLength) {
+      ctx.addIssue({ code: "custom", path: ["preferences", "length"], message: "preferences.length must equal requestedLength." });
+    }
     if (playlist.tracks.length > playlist.requestedLength) {
       ctx.addIssue({ code: "custom", path: ["tracks"], message: "A playlist cannot have more tracks than requestedLength." });
     }
@@ -84,7 +89,7 @@ export const playlistSchema = z
   });
 export type Playlist = z.infer<typeof playlistSchema>;
 
-/** Draft-2020-12 JSON Schema from the same Zod source (without the four Zod-only rules). */
+/** Draft-2020-12 JSON Schema from the same Zod source (without the five Zod-only rules). */
 export const playlistJsonSchema = z.toJSONSchema(playlistSchema);
 
 export { PLAYLIST_EXAMPLES } from "./examples";

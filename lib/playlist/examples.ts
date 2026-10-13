@@ -1,4 +1,5 @@
 import { MOOD_EXAMPLES } from "../mood";
+import { DEFAULT_PREFERENCES } from "../preferences";
 import type { Playlist, PlaylistTrack } from "./index";
 
 // Synthetic fixtures for tests and documentation only. They are not real songs
@@ -24,11 +25,24 @@ const tracks = (count: number) => Array.from({ length: count }, (_, i) => track(
 
 export const PLAYLIST_EXAMPLES = [
   // Full playlist: tracks.length === requestedLength, featured track first.
-  { mood: MOOD_EXAMPLES[0], requestedLength: 5, tracks: tracks(5), featuredTrackId: track(1).spotifyId },
+  {
+    mood: MOOD_EXAMPLES[0],
+    requestedLength: 5,
+    preferences: { ...DEFAULT_PREFERENCES, length: 5 },
+    tracks: tracks(5),
+    featuredTrackId: track(1).spotifyId,
+  },
   // Short playlist, featured track not first, multi-artist track, both YouTube kinds.
   {
     mood: MOOD_EXAMPLES[2],
     requestedLength: 10,
+    preferences: {
+      genres: ["jazz", "lo-fi"],
+      artists: ["Example Artist"],
+      languages: ["english", "french"],
+      situation: "relaxing",
+      length: 10,
+    },
     tracks: [
       track(1),
       track(2, {
@@ -43,6 +57,7 @@ export const PLAYLIST_EXAMPLES = [
   {
     mood: MOOD_EXAMPLES[4],
     requestedLength: 5,
+    preferences: { ...DEFAULT_PREFERENCES, length: 5 },
     tracks: [track(7, { album: null, coverImageUrl: null })],
     featuredTrackId: track(7).spotifyId,
   },

@@ -1,6 +1,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { z } from "zod";
 import { MOOD_EXAMPLES, type MoodResult } from "../mood";
+import { DEFAULT_PREFERENCES, PREFERENCE_LENGTHS, type Preferences } from "../preferences";
 import {
   PLAYLIST_EXAMPLES, PLAYLIST_LENGTHS, playlistJsonSchema, playlistSchema, playlistTrackSchema,
   trackSchema, youtubeLinkSchema,
@@ -26,6 +27,7 @@ describe("types", () => {
     expectTypeOf<PlaylistTrack>().toEqualTypeOf<z.infer<typeof playlistTrackSchema>>();
     expectTypeOf<Playlist>().toEqualTypeOf<z.infer<typeof playlistSchema>>();
     expectTypeOf<Playlist["mood"]>().toEqualTypeOf<MoodResult>();
+    expectTypeOf<Playlist["preferences"]>().toEqualTypeOf<Preferences>();
     const link = {} as YouTubeLink;
     if (link.kind === "video") expectTypeOf(link).toEqualTypeOf<{ kind: "video"; url: string }>();
     else expectTypeOf(link).toEqualTypeOf<{ kind: "search"; url: string }>();
@@ -47,6 +49,10 @@ describe("fixtures", () => {
     expect(tracks.some((t) => t.artists.length === 1)).toBe(true);
     expect(tracks.some((t) => t.artists.length > 1)).toBe(true);
     expect(tracks.some((t) => t.album === null && t.coverImageUrl === null)).toBe(true);
+    expect(all.some((p) => p.preferences.genres.length > 0 && p.preferences.artists.length > 0
+      && p.preferences.languages.length > 0 && p.preferences.situation !== null)).toBe(true);
+    expect(all.some((p) => p.preferences.genres.length === 0 && p.preferences.situation === null)).toBe(true);
+    for (const p of all) expect(p.preferences.length).toBe(p.requestedLength);
     expect(new Set(tracks.map((t) => t.youtube.kind))).toEqual(new Set(["video", "search"]));
     for (const t of tracks) if (t.coverImageUrl) expect(t.coverImageUrl).toMatch(/^https:\/\/example\.com\//);
   });
@@ -178,8 +184,8 @@ describe("playlistTrackSchema", () => {
 });
 
 describe("playlistSchema", () => {
-  const make = (n: number, requestedLength: unknown, featured = id(1)) => ({ ...playlist, requestedLength, tracks: many(n), featuredTrackId: featured });
-  it.each(["mood", "requestedLength", "tracks", "featuredTrackId"])("requires %s", (f) => {
+  const make = (n: number, requestedLength: unknown, featured = id(1)) => ({ ...playlist, requestedLength, preferences: { ...playlist.preferences, length: requestedLength }, tracks: many(n), featuredTrackId: featured });
+  it.each(["mood", "requestedLength", "preferences", "tracks", "featuredTrackId"])("requires %s", (f) => {
     const m: Record<string, unknown> = clone(playlist);
     delete m[f];
     expect(ok(playlistSchema, m)).toBe(false);
@@ -217,6 +223,45 @@ describe("playlistSchema", () => {
   });
 });
 
+describe("playlist preferences", () => {
+  const firstIssuePath = (v: unknown) => {
+    const r = playlistSchema.safeParse(v);
+    return r.success ? null : r.error.issues.map((i) => i.path);
+  };
+  const withPrefs = (preferences: unknown) => ({ ...playlist, preferences });
+  const prefs = playlist.preferences;
+  it("accepts default preferences", () => {
+    expect(ok(playlistSchema, withPrefs({ ...DEFAULT_PREFERENCES, length: playlist.requestedLength }))).toBe(true);
+  });
+  it("rejects a missing or null preferences value", () => {
+    expect(firstIssuePath({ ...playlist, preferences: undefined })).not.toBeNull();
+    expect(ok(playlistSchema, withPrefs(null))).toBe(false);
+  });
+  it.each([
+    ["unknown genre", { ...prefs, genres: ["polka"] }],
+    ["duplicate genre", { ...prefs, genres: ["jazz", "jazz"] }],
+    ["too many artists", { ...prefs, artists: Array.from({ length: 11 }, (_, i) => `Artist ${i}`) }],
+    ["blank artist", { ...prefs, artists: ["  "] }],
+    ["unknown situation", { ...prefs, situation: "skiing" }],
+    ["length 7", { ...prefs, length: 7 }],
+    ["extra key", { ...prefs, mood: "x" }],
+  ])("rejects invalid preferences: %s", (_name, bad) => {
+    const paths = firstIssuePath(withPrefs(bad));
+    expect(paths).not.toBeNull();
+    for (const p of paths!) expect(p[0]).toBe("preferences");
+  });
+  it("requires preferences.length to equal requestedLength", () => {
+    const bad = { ...playlist, requestedLength: 10, preferences: { ...prefs, length: 20 } };
+    expect(firstIssuePath(bad)).toContainEqual(["preferences", "length"]);
+    for (const n of PLAYLIST_LENGTHS) {
+      expect(ok(playlistSchema, { ...playlist, requestedLength: n, preferences: { ...prefs, length: n } })).toBe(true);
+    }
+  });
+  it("keeps PLAYLIST_LENGTHS and PREFERENCE_LENGTHS equal", () => {
+    expect([...PLAYLIST_LENGTHS]).toEqual([...PREFERENCE_LENGTHS]);
+  });
+});
+
 describe("playlistJsonSchema", () => {
   type J = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   const js = playlistJsonSchema as J;
@@ -227,7 +272,7 @@ describe("playlistJsonSchema", () => {
     expect(js.$schema).toBe("https://json-schema.org/draft/2020-12/schema");
   });
   it("requires fields and forbids extras on each object", () => {
-    expect(js.required).toEqual(["mood", "requestedLength", "tracks", "featuredTrackId"]);
+    expect(js.required).toEqual(["mood", "requestedLength", "preferences", "tracks", "featuredTrackId"]);
     expect(js.additionalProperties).toBe(false);
     expect(trackJs.additionalProperties).toBe(false);
     expect(trackJs.required).toEqual([
@@ -263,6 +308,12 @@ describe("playlistJsonSchema", () => {
     expect(new RegExp(video.properties.url.pattern).test("https://youtu.be/abcDEF-_123")).toBe(false);
     expect(new RegExp(search.properties.url.pattern).test("https://www.youtube.com/results?search_query=a%20b")).toBe(true);
     expect(new RegExp(search.properties.url.pattern).test("https://www.youtube.com/results?search_query=a&b")).toBe(false);
+  });
+  it("describes the preferences fields", () => {
+    const pr = js.properties.preferences as J;
+    expect(pr.additionalProperties).toBe(false);
+    expect(pr.required).toEqual(["genres", "artists", "languages", "situation", "length"]);
+    expect(Object.keys(pr.properties)).toEqual(["genres", "artists", "languages", "situation", "length"]);
   });
   it("keeps the mood constraints from the mood contract", () => {
     expect(js.properties.mood.additionalProperties).toBe(false);
