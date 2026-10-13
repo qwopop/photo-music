@@ -242,7 +242,7 @@ export async function getPhotoResult(
     const checked = z
       .object({ mood: moodResultSchema, playlist: playlistSchema, preferences: preferencesSchema, palette: paletteSchema })
       .safeParse({ mood, playlist, preferences: analysis.preferences, palette: analysis.palette });
-    if (!checked.success) throw new PhotoResultError("CORRUPT_RESULT");
+    if (!checked.success) throw new Error("DEBUG " + JSON.stringify(checked.error.issues.map((i) => [i.path, i.message])));
 
     return {
       id: row.photo.id,
