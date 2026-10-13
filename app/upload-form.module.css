@@ -1,0 +1,170 @@
+/* Colours derive from the --background and --foreground tokens in
+   globals.css. The error and success tones keep at least 4.5:1 contrast
+   against both backgrounds. */
+.uploader {
+  --border: color-mix(in srgb, var(--foreground) 55%, var(--background));
+  --muted: color-mix(in srgb, var(--foreground) 72%, var(--background));
+  --tint: color-mix(in srgb, var(--foreground) 7%, var(--background));
+  --error: #b3261e;
+  --success: #186a2c;
+
+  width: 100%;
+  max-width: 36rem;
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .uploader {
+    --error: #ff8a80;
+    --success: #6fdd8b;
+  }
+}
+
+.area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 24px 16px;
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+.areaActive {
+  border-style: solid;
+  border-color: var(--foreground);
+  background-color: var(--tint);
+}
+
+.preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+/* Scales down, never up or cropped, to fit the area and 60% of the window. */
+.previewImage {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 60vh;
+  max-height: 60dvh;
+  border-radius: 8px;
+}
+
+.previewCaption {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-size: 0.95rem;
+}
+
+/* Visually hidden, but still focusable and named by its label. */
+.fileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  opacity: 0;
+}
+
+.chooseButton,
+.uploadButton {
+  display: inline-block;
+  min-height: 44px;
+  padding: 10px 20px;
+  border: 2px solid var(--foreground);
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.25;
+  cursor: pointer;
+}
+
+.chooseButton {
+  color: var(--foreground);
+  background: transparent;
+}
+
+.chooseButton:hover {
+  background: var(--tint);
+}
+
+.fileInput:disabled + .chooseButton {
+  color: var(--muted);
+  border-color: var(--border);
+  background: transparent;
+  cursor: not-allowed;
+}
+
+.uploadButton {
+  color: var(--background);
+  background: var(--foreground);
+}
+
+.uploadButton:disabled {
+  color: var(--muted);
+  border-color: var(--border);
+  background: transparent;
+  cursor: not-allowed;
+}
+
+.fileInput:focus-visible + .chooseButton,
+.uploadButton:focus-visible {
+  outline: 3px solid var(--foreground);
+  outline-offset: 3px;
+}
+
+.dropText {
+  color: var(--foreground);
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.messages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.message {
+  overflow-wrap: anywhere;
+  padding: 10px 14px;
+  border-left: 4px solid currentColor;
+  border-radius: 4px;
+  background: var(--tint);
+  text-align: start;
+}
+
+/* Live regions stay in the page while empty, so that they announce changes. */
+.message:empty {
+  padding: 0;
+  border: 0;
+}
+
+.error {
+  color: var(--error);
+}
+
+.progress {
+  color: var(--foreground);
+}
+
+.success {
+  color: var(--success);
+}
