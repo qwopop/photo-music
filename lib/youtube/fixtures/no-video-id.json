@@ -1,0 +1,19 @@
+{
+  "items": [
+    {
+      "id": {
+        "kind": "youtube#channel"
+      },
+      "snippet": {
+        "title": "Blinding Lights",
+        "channelTitle": "The Weeknd"
+      }
+    },
+    {
+      "snippet": {
+        "title": "Blinding Lights",
+        "channelTitle": "The Weeknd"
+      }
+    }
+  ]
+}
