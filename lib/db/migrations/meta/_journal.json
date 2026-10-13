@@ -15,6 +15,13 @@
       "when": 1791854590569,
       "tag": "0001_create_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791863914373,
+      "tag": "0002_saved_analyses_and_playlists",
+      "breakpoints": true
     }
   ]
 }

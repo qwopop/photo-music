@@ -131,14 +131,22 @@ describe("the migrations", () => {
     expect(history.map((row) => Number(row.created_at))).toEqual(migrations.map((migration) => migration.folderMillis));
   });
 
-  it("the current migration set creates only users and sessions", async () => {
+  it("the current migration set creates only the app's tables", async () => {
     const tables = await rows<{ name: string }>(
       `select table_schema || '.' || table_name as name
        from information_schema.tables
        where table_schema not in ('pg_catalog', 'information_schema')
        order by 1`,
     );
-    expect(tables.map((table) => table.name)).toEqual(["drizzle.__drizzle_migrations", "public.sessions", "public.users"]);
+    expect(tables.map((table) => table.name)).toEqual([
+      "drizzle.__drizzle_migrations",
+      "public.analyses",
+      "public.photos",
+      "public.playlist_tracks",
+      "public.playlists",
+      "public.sessions",
+      "public.users",
+    ]);
   });
 
   it("0000_create_users alone creates only users, with no session or other table", async () => {
