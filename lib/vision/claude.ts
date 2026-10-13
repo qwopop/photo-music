@@ -30,7 +30,7 @@ export interface ClaudeVisionClientOptions {
 // Only these request headers leave the process. This drops anything the SDK
 // copies from ANTHROPIC_CUSTOM_HEADERS, such as an Authorization header.
 const SENT_HEADERS = /^(accept|anthropic-.+|content-type|user-agent|x-stainless-.+)$/i;
-// The SDK's own retry rules apply, but a server-sent retry-after must not stall us.
+// Provider headers cannot override the bounded retry policy below.
 const IGNORED_RESPONSE_HEADERS = ["retry-after", "retry-after-ms", "x-should-retry"];
 
 function abortError(): Error {
@@ -62,6 +62,15 @@ function guardedFetch(base: Fetch, apiKey: string): Fetch {
   };
 }
 
+/** Retry only transport failures, HTTP 429 and server errors, once. */
+function isTransient(error: unknown): boolean {
+  if (error instanceof Anthropic.APIConnectionError) return true;
+  if (error instanceof Anthropic.APIError) {
+    return error.status === 429 || (typeof error.status === "number" && error.status >= 500);
+  }
+  return false;
+}
+
 function toVisionError(error: unknown): VisionError {
   if (error instanceof VisionError) return new VisionError(error.code);
   if (error instanceof ConfigError) return new VisionError("VISION_NOT_CONFIGURED");
@@ -87,7 +96,7 @@ export function createClaudeVisionClient(options: ClaudeVisionClientOptions = {}
           baseURL: VISION_BASE_URL,
           logLevel: "off",
           timeout: options.timeoutMs ?? VISION_TIMEOUT_MS,
-          maxRetries: 1,
+          maxRetries: 0, // The SDK also retries 408/409; our narrower policy is below.
           fetch: guardedFetch(options.fetch ?? ((input, init) => fetch(input, init)), apiKey),
         });
 
@@ -95,7 +104,7 @@ export function createClaudeVisionClient(options: ClaudeVisionClientOptions = {}
         // replaced by a pass-through, so that stop_reason is checked first and
         // a cut-off or non-JSON answer maps to a VisionError, not an SDK error.
         const format = { ...betaZodOutputFormat(moodResultSchema), parse: (text: string) => text };
-        const message = await client.beta.messages.parse({
+        const send = () => client.beta.messages.parse({
           model: VISION_MODEL,
           max_tokens: MAX_TOKENS,
           betas: ["server-side-fallback-2026-07-01"],
@@ -114,6 +123,17 @@ export function createClaudeVisionClient(options: ClaudeVisionClientOptions = {}
             },
           ],
         });
+
+        let message;
+        for (let attempt = 0; ; attempt += 1) {
+          try {
+            message = await send();
+            break;
+          } catch (error) {
+            if (attempt === 0 && isTransient(error)) continue;
+            throw error;
+          }
+        }
 
         if (message.stop_reason === "refusal") throw new VisionError("VISION_REFUSED");
         if (message.stop_reason !== "end_turn") throw new VisionError("VISION_BAD_RESPONSE");
