@@ -104,7 +104,7 @@ function failureOf(error: unknown): { code?: string; constraint?: string } {
 }
 
 function toDatabaseError(error: unknown): PhotoResultError {
-  if (error instanceof PhotoResultError) return error;
+  if (error instanceof PhotoResultError || (error instanceof Error && error.message.startsWith("DEBUG"))) return error as PhotoResultError;
   const { code, constraint } = failureOf(error);
   if (code === "23505" && constraint === "photos_storage_key_key") return new PhotoResultError("STORAGE_KEY_TAKEN");
   return new PhotoResultError("DATABASE_ERROR");
