@@ -336,6 +336,44 @@ text, model output, image data or key.
 **Privacy.** Only a downscaled copy with no metadata goes to Anthropic's API.
 This module stores and logs nothing.
 
+## Photo analysis endpoint
+
+`POST /api/analyze` with `Content-Type: application/json` and exactly
+`{"upload": "<handle>"}` (body at most 1 KiB; the handle comes from
+`POST /api/upload`). Any other body, a non-JSON body or an extra field gives
+400. Other methods give 405 with `Allow: POST`.
+
+Success (200): `{"mood": MoodResult, "palette": {"colors": [6 hex strings], "brightness": number}}`.
+Nothing else is returned. Every response sends `Cache-Control: no-store`.
+
+The handle is single use: it is removed from the temporary store when read, so
+after any later failure the visitor uploads again. A 429 does not consume it.
+
+Errors are `{"error": {"code", "message"}}`:
+
+| Cause | Status | Code |
+| --- | --- | --- |
+| Bad body | 400 | `INVALID_REQUEST` |
+| Unknown or expired handle | 404 | `UPLOAD_NOT_FOUND` |
+| Unreadable image | 415 | `INVALID_IMAGE` |
+| Image too large | 413 | `FILE_TOO_LARGE` |
+| No visible pixels | 422 | `NO_VISIBLE_PIXELS` |
+| Provider refused | 422 | `VISION_REFUSED` |
+| Rate limit exceeded | 429 | `RATE_LIMITED` (with `Retry-After` seconds) |
+| Unusable provider answer | 502 | `VISION_BAD_RESPONSE` |
+| Provider unavailable | 503 | `VISION_UNAVAILABLE` |
+| Vision not configured | 503 | `VISION_NOT_CONFIGURED` |
+| Anything else | 500 | `ANALYSIS_FAILED` |
+
+Order of work: body, rate limit, consume handle, palette (local), then the
+paid vision call, so invalid, empty or rate-limited requests never cost money.
+
+Rate limit: at most 10 requests per IP in any 10 minutes (in memory, at most
+10,000 IPs tracked; at the cap a new IP is rejected). Requests rejected with
+400 do not count. The IP is the first entry of `X-Forwarded-For`, or the single
+bucket `unknown` when the header is absent or blank. That header is only
+trustworthy behind a proxy that sets it; #33 and #48 revisit this.
+
 ## Shared mood interpretation
 
 Browser and server code import the same plain data contract:
