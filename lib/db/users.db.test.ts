@@ -138,7 +138,7 @@ describe("the migrations", () => {
        where table_schema not in ('pg_catalog', 'information_schema')
        order by 1`,
     );
-    expect(tables.map((table) => table.name)).toEqual(["drizzle.__drizzle_migrations", "public.sessions", "public.users"]);
+    expect(tables.map((table) => table.name)).toEqual(["drizzle.__drizzle_migrations", "public.auth_attempts", "public.sessions", "public.users"]);
   });
 
   it("0000_create_users alone creates only users, with no session or other table", async () => {

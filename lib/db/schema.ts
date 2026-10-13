@@ -49,3 +49,18 @@ export const sessions = pgTable(
   },
   (table) => [index("sessions_user_id_idx").on(table.userId)],
 );
+
+/**
+ * One row is one counted attempt (see `lib/rate-limit`). `key_hash` is the
+ * SHA-256 of an email or IP, never the raw value.
+ */
+export const authAttempts = pgTable(
+  "auth_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    scope: text("scope").notNull(),
+    keyHash: text("key_hash").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("auth_attempts_scope_key_created_idx").on(table.scope, table.keyHash, table.createdAt)],
+);

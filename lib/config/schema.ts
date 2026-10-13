@@ -40,6 +40,11 @@ export interface StorageConfig {
   secretAccessKey: string;
 }
 
+export interface ClientIpConfig {
+  /** Name of the request header that holds the client IP, lower-cased. */
+  header: string;
+}
+
 /** One missing or invalid variable. Holds the reason, never the value. */
 export interface ConfigProblem {
   variable: string;
@@ -141,6 +146,19 @@ const storageSchema = z.object({
   S3_SECRET_ACCESS_KEY: required(),
 });
 
+/** Default: Vercel sets this header and clients cannot spoof it. */
+export const DEFAULT_CLIENT_IP_HEADER = "x-vercel-forwarded-for";
+
+const clientIpSchema = z.object({
+  CLIENT_IP_HEADER: z.preprocess(
+    normalize,
+    z
+      .string()
+      .regex(/^[A-Za-z0-9-]+$/, { error: "must be an HTTP header name, such as x-vercel-forwarded-for" })
+      .optional(),
+  ),
+});
+
 /** Every variable the config module reads, in `.env.example` order. */
 export const configVariableNames: readonly string[] = [
   databaseSchema,
@@ -148,6 +166,7 @@ export const configVariableNames: readonly string[] = [
   spotifySchema,
   youTubeSchema,
   storageSchema,
+  clientIpSchema,
 ].flatMap((schema) => Object.keys(schema.shape));
 
 /** Validates one group's variables, reporting all of its problems at once. */
@@ -195,4 +214,9 @@ export function parseStorageConfig(env: Env): StorageConfig {
     accessKeyId: values.S3_ACCESS_KEY_ID,
     secretAccessKey: values.S3_SECRET_ACCESS_KEY,
   };
+}
+
+export function parseClientIpConfig(env: Env): ClientIpConfig {
+  const values = parseGroup("Client IP", clientIpSchema, env);
+  return { header: (values.CLIENT_IP_HEADER ?? DEFAULT_CLIENT_IP_HEADER).toLowerCase() };
 }

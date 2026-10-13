@@ -15,6 +15,13 @@
       "when": 1791854590569,
       "tag": "0001_create_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791864115053,
+      "tag": "0002_create_auth_attempts",
+      "breakpoints": true
     }
   ]
 }

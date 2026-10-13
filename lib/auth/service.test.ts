@@ -7,6 +7,12 @@ import { messages } from "./rules";
 import { currentUser, login, logout, signup } from "./service";
 import { createToken, sessionId, SESSION_LIFETIME_MS } from "./tokens";
 
+// These tests do not exercise the rate limits (see rate-limit.test.ts); keep them off the real database.
+vi.mock("../rate-limit/repository", async () => {
+  const { memoryRateLimitRepository } = await import("../rate-limit/memory");
+  return { rateLimitRepository: memoryRateLimitRepository() };
+});
+
 const input = { email: "  Ann@Example.COM  ", password: "12345678", confirmPassword: "12345678" };
 const user = { id: "00000000-0000-4000-8000-000000000001", email: "Ann@Example.COM" };
 let repository: AuthRepository;

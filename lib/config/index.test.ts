@@ -21,6 +21,7 @@ describe("lib/config", () => {
     const config = await import("./index");
     expect(Object.keys(config).sort()).toEqual([
       "ConfigError",
+      "getClientIpConfig",
       "getDatabaseConfig",
       "getSpotifyConfig",
       "getStorageConfig",

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ConfigError,
   configVariableNames,
+  parseClientIpConfig,
   parseDatabaseConfig,
   parseSpotifyConfig,
   parseStorageConfig,
@@ -77,7 +78,7 @@ const groups = [
 
 describe("configVariableNames", () => {
   it("lists every variable of every group once", () => {
-    expect(configVariableNames).toEqual(groups.flatMap(({ variables }) => variables));
+    expect(configVariableNames).toEqual([...groups.flatMap(({ variables }) => variables), "CLIENT_IP_HEADER"]);
     expect(new Set(configVariableNames).size).toBe(configVariableNames.length);
   });
 
@@ -286,5 +287,18 @@ describe("error messages never contain values", () => {
     const error = configError(parseStorageConfig, env);
     expect(error.problems.map(({ variable }) => variable)).toEqual(["S3_ENDPOINT", "S3_SECRET_ACCESS_KEY"]);
     expect(`${error.message}\n${error.stack}\n${JSON.stringify(error.problems)}`).not.toContain("leakcheck");
+  });
+});
+
+describe("parseClientIpConfig", () => {
+  it("defaults to x-vercel-forwarded-for", () => {
+    expect(parseClientIpConfig({})).toStrictEqual({ header: "x-vercel-forwarded-for" });
+    expect(parseClientIpConfig({ CLIENT_IP_HEADER: "  " })).toStrictEqual({ header: "x-vercel-forwarded-for" });
+  });
+  it("trims and lower-cases a configured header", () => {
+    expect(parseClientIpConfig({ CLIENT_IP_HEADER: " CF-Connecting-IP " })).toStrictEqual({ header: "cf-connecting-ip" });
+  });
+  it("rejects something that is not a header name without echoing it", () => {
+    expect(() => parseClientIpConfig({ CLIENT_IP_HEADER: "bad header!" })).toThrow(/CLIENT_IP_HEADER must be an HTTP header name/);
   });
 });

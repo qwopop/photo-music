@@ -11,11 +11,13 @@
 import "server-only";
 
 import {
+  parseClientIpConfig,
   parseDatabaseConfig,
   parseSpotifyConfig,
   parseStorageConfig,
   parseVisionConfig,
   parseYouTubeConfig,
+  type ClientIpConfig,
   type DatabaseConfig,
   type SpotifyConfig,
   type StorageConfig,
@@ -25,6 +27,7 @@ import {
 
 export { ConfigError } from "./schema";
 export type {
+  ClientIpConfig,
   ConfigProblem,
   DatabaseConfig,
   SpotifyConfig,
@@ -56,4 +59,9 @@ export function getYouTubeConfig(): YouTubeConfig {
 /** `S3_ENDPOINT` (optional), `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY`. */
 export function getStorageConfig(): StorageConfig {
   return parseStorageConfig(process.env);
+}
+
+/** `CLIENT_IP_HEADER` (optional, default `x-vercel-forwarded-for`). */
+export function getClientIpConfig(): ClientIpConfig {
+  return parseClientIpConfig(process.env);
 }

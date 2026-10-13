@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { formatMinutes } from "../rate-limit";
 
 export const messages = {
   emailRequired: "Enter your email address.",
@@ -12,6 +13,10 @@ export const messages = {
   incorrect: "Email or password is incorrect.",
   failure: "Something went wrong. Please try again.",
 } as const;
+
+export function tooManyAttempts(retryAfterMs: number): string {
+  return `Too many attempts. Try again in ${formatMinutes(retryAfterMs)}.`;
+}
 
 export type FieldErrors = Partial<Record<"email" | "password" | "confirmPassword", string>>;
 /** Only safe form state travels back to React. Never include passwords. */

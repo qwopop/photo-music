@@ -199,6 +199,20 @@ state. Failed forms preserve only the email and their safe messages.
 Repeated-attempt limits do not exist yet (#41). Changing or resetting a password
 and verifying email ownership do not exist yet (#40).
 
+### Sign-in and sign-up limits
+
+Repeated attempts are limited so password guessing is slow and `/login` and `/signup` cannot be used to exhaust the server with argon2id work. Counters are rows in the `auth_attempts` table (one row per counted attempt, in a sliding window), so they hold across several server instances. Only a SHA-256 hash of the email or IP is stored. Each write deletes rows older than 1 hour.
+
+| Scope | Counts | Limit |
+|---|---|---|
+| `login_email` | failed log ins for that email, whether or not an account exists | 5 per 10 minutes |
+| `login_ip` | failed log ins from that IP | 20 per 10 minutes |
+| `signup_ip` | sign-up attempts that reach password hashing, from that IP | 10 per 1 hour |
+
+- The limits are constants in `lib/auth/limits.ts`. A blocked attempt shows `Too many attempts. Try again in N minutes.`, is checked before any password hashing or verification, adds no row, and is refused even with the correct password. A successful log in clears that email's count, not the IP's.
+- `lib/rate-limit` exposes the reusable function (`checkRateLimit`, `recordAttempt`, `clearAttempts`: a scope, a key, a limit, a window and an injected clock) for other forms.
+- **Client IP.** The IP is read only from the header named by `CLIENT_IP_HEADER` (default `x-vercel-forwarded-for`, which Vercel sets and clients cannot spoof). The first comma-separated entry must be a valid IPv4 or IPv6 address; IPv6 is reduced to its /64 prefix. `x-forwarded-for` and every other header are ignored unless named there. **When hosting somewhere other than Vercel, set `CLIENT_IP_HEADER`** to a header your proxy sets and overwrites on every request, or the per-IP limits are skipped. If the header is missing or invalid (for example in local development), only the per-email limit applies, and the server logs one fixed line without the header value.
+
 ## Dominant photo palette
 
 Server-side analysis and result-page theming share this contract from
@@ -468,7 +482,7 @@ be shown to users as recommendations.
 
 ## Configuration
 
-Settings such as the database URL and API keys come from environment variables. One server-only module, `lib/config`, reads and validates them. It has one getter per feature: `getDatabaseConfig()`, `getVisionConfig()`, `getSpotifyConfig()`, `getYouTubeConfig()` and `getStorageConfig()`. [`.env.example`](.env.example) lists every variable, with what it is, which feature needs it, where to get it, and its format.
+Settings such as the database URL and API keys come from environment variables. One server-only module, `lib/config`, reads and validates them. It has one getter per feature: `getDatabaseConfig()`, `getVisionConfig()`, `getSpotifyConfig()`, `getYouTubeConfig()`, `getStorageConfig()` and `getClientIpConfig()`. [`.env.example`](.env.example) lists every variable, with what it is, which feature needs it, where to get it, and its format.
 
 Copy `.env.example` to `.env.local`, then fill in only the groups for the features you work on. Leave the others empty:
 
