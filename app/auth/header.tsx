@@ -16,7 +16,7 @@ async function AccountLinks() {
     user = null;
   }
   if (!user) return <><Link href="/login">Log in</Link><Link href="/signup">Sign up</Link></>;
-  return <><span>Signed in as {user.email}</span><LogoutButton /></>;
+  return <><Link href="/history">History</Link><span>Signed in as {user.email}</span><LogoutButton /></>;
 }
 
 export async function Header() {
