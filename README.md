@@ -618,7 +618,7 @@ docker compose exec db psql -U photo_music -d photo_music
 
 ## Database schema and migrations
 
-The tables are defined with [Drizzle ORM](https://orm.drizzle.team/) in TypeScript, in [`lib/db/schema.ts`](lib/db/schema.ts). So far there is one table, `users`. Every change to the tables is a plain SQL migration in [`lib/db/migrations/`](lib/db/migrations), which `drizzle-kit generate` writes and which is committed. App code gets the database from `getDb()` in `lib/db`, only while handling a request (see the Rules in [`AGENTS.md`](AGENTS.md)).
+The tables are defined with [Drizzle ORM](https://orm.drizzle.team/) in TypeScript, in [`lib/db/schema.ts`](lib/db/schema.ts). They include `users` and `sessions` for accounts, plus `photos`, `analyses`, `playlists` and `playlist_tracks` for a user's saved results. Photos store only private object-storage keys, never URLs. The `lib/db/photo-results.ts` repository provides owner-scoped `savePhotoResult`, `getPhotoResult`, `listPhotoResults` and `deletePhotoResult` functions. Every change to the tables is a plain SQL migration in [`lib/db/migrations/`](lib/db/migrations), which `drizzle-kit generate` writes and which is committed. App code gets the database from `getDb()` in `lib/db`, only while handling a request (see the Rules in [`AGENTS.md`](AGENTS.md)).
 
 Apply the pending migrations to the database in `DATABASE_URL`. Run this after starting the database, and after pulling new migrations:
 
