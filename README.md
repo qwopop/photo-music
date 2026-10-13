@@ -432,6 +432,28 @@ and an 11-character ID (`A-Za-z0-9_-`), or `{ kind: "search", url }`, the
 fallback when no video was found, with `https://www.youtube.com/results?search_query=`
 and a non-empty query without whitespace, `&` or `#`. `kind` must match the URL.
 
+For shared YouTube results across restarts and server instances, inject the
+PostgreSQL store when constructing the resolver during a request:
+
+```ts
+import { getYouTubeConfig } from "@/lib/config";
+import { createYouTubeResolver } from "@/lib/youtube";
+import { createPostgresYouTubeCacheStore } from "@/lib/youtube/cache-store";
+
+const resolver = createYouTubeResolver({
+  apiKey: getYouTubeConfig().apiKey,
+  cacheStore: createPostgresYouTubeCacheStore(),
+});
+```
+
+Run `npm run db:migrate` first. The store uses `DATABASE_URL` and keys results by
+trimmed, whitespace-collapsed, lowercase title and first artist. Videos expire
+seven days after `fetchedAt`; successful no-result search links expire after one
+hour. Provider failures are never stored. Database read or write failures fall
+back to the resolver's bounded memory cache, without exposing database errors.
+Without `cacheStore`, the resolver remains memory-only. Store creation does not
+read configuration or open a connection.
+
 `PlaylistTrack` is a `Track` plus `youtube` (a `YouTubeLink`) and
 `matchReason` (1–300 characters, with a non-whitespace character, saying why the
 song could fit the photo's mood; an interpretation, not a fact).
