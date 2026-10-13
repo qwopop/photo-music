@@ -162,6 +162,43 @@ exercise the rejections: for example, `apng-default-frame.apng` or
 Do not paste a live upload handle into public logs or issue comments. Release
 it through the server-only API after processing, or let its ten-minute TTL expire.
 
+## Accounts
+
+Accounts are optional; guests can still use the home page and upload without a database.
+To try sign-up locally:
+
+```sh
+docker compose up -d --wait
+npm run db:migrate
+npm run dev
+```
+
+Open `/signup`. Emails are trimmed, keep their letter case, follow Zod 4's default
+`z.email()` pattern and have at most 254 characters. Account uniqueness and login
+ignore letter case; plus-addresses remain distinct accounts. Passwords are
+NFKC-normalized before hashing and checking, with 8–128 Unicode code points,
+including spaces (spaces are not trimmed). There are no other password rules.
+Passwords use argon2id with memory 19,456 KiB, two iterations and parallelism one.
+
+Sessions last 30 days from sign-in and are never extended. The
+`photo_music_session` cookie is `HttpOnly`, `Secure`, `SameSite=Lax` and `Path=/`,
+with no `Domain`; its value is a random 32-byte base64url token. Only the token's
+SHA-256 hash is stored in `sessions`. Logging out submits a POST, removes the
+cookie and ends that browser's session on the server. Other browsers stay signed
+in. Secure cookies need HTTPS in deployment; modern browsers also support them
+on trustworthy localhost origins.
+
+Later server code uses `getCurrentUser()` from `lib/auth` only while handling a
+request. Check it in every server action, route handler and page that reads or
+changes a user's data, and never cache it or its session lookup. It returns only
+`{ id, email }` or `null`; a database outage throws so callers do not mistake it
+for a guest. The header catches such outages and keeps public pages available.
+No password, hash, token or database error detail is logged or returned in form
+state. Failed forms preserve only the email and their safe messages.
+
+Repeated-attempt limits do not exist yet (#41). Changing or resetting a password
+and verifying email ownership do not exist yet (#40).
+
 ## Dominant photo palette
 
 Server-side analysis and result-page theming share this contract from

@@ -63,7 +63,7 @@ A photo-inspired music discovery and social-content website. Users upload a phot
 | Image analysis | Hosted vision AI API | Avoids training and hosting a custom vision model |
 | Music data | Spotify and YouTube integrations | Real songs and playable destinations |
 | Image storage | Private S3-compatible object storage (S3 or Cloudflare R2), signed URLs | Supports saved photo history without putting images in public folders |
-| Authentication | Auth.js (email/password with secure sessions) | Simple account system for the MVP |
+| Authentication | No auth library: argon2id passwords and random-token database sessions | Optional email/password accounts with server-side session revocation |
 | Hosting | Vercel or similar | Easy deployment for a Next.js app |
 
 **Known trade-offs of this choice:**

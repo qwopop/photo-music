@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
+import { Header } from "./auth/header";
 
 export const metadata: Metadata = {
   title: "Photo Music",
@@ -13,7 +14,7 @@ export default function RootLayout({
 }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body><Header />{children}</body>
     </html>
   );
 }

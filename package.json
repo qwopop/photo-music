@@ -18,6 +18,7 @@
     "test:db": "node --env-file-if-exists=.env.local node_modules/vitest/vitest.mjs run --config vitest.db.config.mts"
   },
   "dependencies": {
+    "@node-rs/argon2": "^2.2.1",
     "drizzle-orm": "^0.45.4",
     "next": "16.4.0",
     "pg": "^8.23.1",

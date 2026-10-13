@@ -14,7 +14,7 @@
  * migrations and the runtime client always agree about names.
  */
 import { sql, type SQL } from "drizzle-orm";
-import { pgTable, text, timestamp, uniqueIndex, uuid, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { index, pgTable, text, timestamp, uniqueIndex, uuid, type AnyPgColumn } from "drizzle-orm/pg-core";
 
 /** `lower(column)`, for case-insensitive comparisons and indexes. */
 export function lower(column: AnyPgColumn): SQL {
@@ -37,3 +37,15 @@ export const users = pgTable(
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
+
+export const sessions = pgTable(
+  "sessions",
+  {
+    // SHA-256 of the private cookie token, never the token itself.
+    id: text("id").primaryKey(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("sessions_user_id_idx").on(table.userId)],
+);

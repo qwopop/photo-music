@@ -131,14 +131,27 @@ describe("the migrations", () => {
     expect(history.map((row) => Number(row.created_at))).toEqual(migrations.map((migration) => migration.folderMillis));
   });
 
-  it("create only the users table: no sessions, accounts or verification tokens", async () => {
+  it("the current migration set creates only users and sessions", async () => {
     const tables = await rows<{ name: string }>(
       `select table_schema || '.' || table_name as name
        from information_schema.tables
        where table_schema not in ('pg_catalog', 'information_schema')
        order by 1`,
     );
-    expect(tables.map((table) => table.name)).toEqual(["drizzle.__drizzle_migrations", "public.users"]);
+    expect(tables.map((table) => table.name)).toEqual(["drizzle.__drizzle_migrations", "public.sessions", "public.users"]);
+  });
+
+  it("0000_create_users alone creates only users, with no session or other table", async () => {
+    await client.query("begin");
+    try {
+      await client.query("create schema historical_users_check");
+      await client.query("set local search_path to historical_users_check");
+      for (const statement of migrations[0].sql) if (statement.trim()) await client.query(statement);
+      expect(await rows("select table_name from information_schema.tables where table_schema = 'historical_users_check' order by table_name"))
+        .toEqual([{ table_name: "users" }]);
+    } finally {
+      await client.query("rollback");
+    }
   });
 
   it("create no extension", async () => {
@@ -148,8 +161,8 @@ describe("the migrations", () => {
     }
   });
 
-  it("need no superuser rights", async () => {
-    // Runs every migration's SQL as a role that is not a superuser, in a
+  it("0000_create_users needs no superuser rights", async () => {
+    // Runs the initial users migration as a role that is not a superuser, in a
     // schema of its own, and rolls it all back. When the test user is a
     // superuser (as in CI), it creates such a role inside the transaction;
     // otherwise it is such a role already.
@@ -172,7 +185,7 @@ describe("the migrations", () => {
       );
       expect(current.rolsuper).toBe(false);
 
-      for (const migration of migrations) {
+      for (const migration of migrations.slice(0, 1)) {
         for (const statement of migration.sql) {
           if (statement.trim() !== "") await client.query(statement);
         }

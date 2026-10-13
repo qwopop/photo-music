@@ -25,6 +25,8 @@ CI (`.github/workflows/ci.yml`, GitHub Actions, Node.js 24) runs on every push t
 
 ## Rules
 
+- Get the signed-in user only from `getCurrentUser()` in `lib/auth`, and check it in every server action, route handler and page that reads or changes a user's data. The UI hiding a button is not an access check.
+- Never log or return a password, a password hash, a session token, or the message of a Drizzle query error, which contains the query's parameters.
 - Dependencies are added in `package.json`. Do not add one without asking.
 - Never commit secrets. Keep `.env*` files git-ignored and list every variable in `.env.example`.
 - Read environment variables only through `lib/config` (lint fails on `process.env` anywhere else). Add a new variable to its schema in `lib/config/schema.ts` and to `.env.example` in the same commit.
