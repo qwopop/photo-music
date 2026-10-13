@@ -411,6 +411,44 @@ the query string with repeated keys; values equal to the default are left out:
 `parsePreferences` never throws: unknown keys and ids are ignored and invalid
 values fall back to the defaults.
 
+## Search criteria
+
+`buildSearchCriteria(mood, preferences)` from `@/lib/criteria` is a pure
+function (no network, randomness, clock or environment variable) that turns a
+`MoodResult` and `Preferences` into `{ genres, energy, tempo, keywords,
+artists, languages, weights }`. Photo mood weighs 0.6, music preferences
+(genres only) 0.3, situation 0.1; an absent source is dropped and the rest are
+rescaled to sum to 1. Genres of one source share its weight equally, and a
+genre named by several sources gets the sum. Artists and languages are passed
+through unchanged. `confidence` does not change the output on purpose: the mood
+is already an interpretation, and a low-confidence mood is corrected by the
+user, not guessed around. `energy` and `tempo` are targets for ranking, not
+search filters.
+
+| Emotion | energy | tempo (bpm) | genres | keywords |
+| --- | --- | --- | --- | --- |
+| happy | 0.75 | 110 to 140 | pop, indie, electronic | upbeat, feel good |
+| sad | 0.25 | 60 to 90 | folk, indie, ambient | melancholic, sad |
+| calm | 0.2 | 60 to 90 | ambient, lo-fi, classical, jazz | calm, peaceful |
+| energetic | 0.9 | 125 to 170 | electronic, rock, hip-hop | energetic, high energy |
+| romantic | 0.4 | 70 to 100 | r-and-b, jazz, pop | romantic, love |
+
+| Situation | energy change | tempo shift | genres | keyword |
+| --- | --- | --- | --- | --- |
+| studying | -0.15 | -15 | lo-fi, ambient, classical | focus |
+| walking-at-night | -0.05 | -5 | electronic, ambient, indie | night |
+| relaxing | -0.2 | -20 | ambient, jazz, lo-fi | relax |
+| driving | +0.15 | +15 | rock, pop, electronic | road trip |
+
+| Source | Weight |
+| --- | --- |
+| mood | 0.6 |
+| preferences | 0.3 |
+| situation | 0.1 |
+
+Secondary moods are trimmed, lowercased and added to the keywords after the
+emotion keywords and before the situation keyword (at most 8 keywords).
+
 ## Shared track and playlist contract
 
 Browser and server code import the same plain data contract for recommended
