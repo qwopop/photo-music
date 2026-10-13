@@ -7,7 +7,7 @@ vi.mock("../db", () => ({ getDb: mocks.getDb }));
 afterEach(() => { mocks.cookie = undefined; vi.unstubAllEnvs(); vi.clearAllMocks(); });
 
 describe("getCurrentUser request boundary", () => {
-  it("starts with server-only", () => expect(readFileSync(new URL("./index.ts", import.meta.url), "utf8").split("\n")[0]).toBe('import "server-only";'));
+  it("starts with server-only", () => expect(readFileSync(new URL("./index.ts", import.meta.url), "utf8").split(/\r?\n/)[0]).toBe('import "server-only";'));
   it("imports without configuration or a database call", async () => {
     vi.stubEnv("DATABASE_URL", undefined);
     expect(await import("./index")).toHaveProperty("getCurrentUser");
