@@ -39,6 +39,7 @@ CI (`.github/workflows/ci.yml`, GitHub Actions, Node.js 24) runs on every push t
 - Never recommend or invent tracks that a music provider did not return. If Spotify or YouTube fails, fall back to a search link.
 - Do not call the vision API again when regenerating recommendations; reuse the stored analysis.
 - Photos are private: no public URLs, and guests' photos are never stored.
+- Photo storage is `lib/storage` only: keys `users/<userId>/<uuid>.<ext>`, private bucket, never set an ACL.
 - Present moods as interpretations, not facts.
 - Do not post to Instagram automatically; generate copy-ready text only.
 - Run `npm run lint`, `npm run typecheck`, and `npm test` before committing.

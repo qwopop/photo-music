@@ -603,3 +603,12 @@ The `database` job:
 - It sets only `DATABASE_URL`, to the local URL from `.env.example`, which is not a secret. It uses no secrets.
 
 See the results in the repository's [Actions tab](https://github.com/qwopop/photo-music/actions/workflows/ci.yml), or in the `CI` check shown next to each commit and on each pull request.
+
+## Photo storage
+
+Registered users' photos live in a private S3-compatible bucket (AWS S3,
+Cloudflare R2 or MinIO), accessed only through `lib/storage`. Keys are
+`users/<userId>/<uuid>.<jpg|png|webp>`. Create the bucket private (no public
+access): the module never sets an ACL and never returns an unsigned URL. It
+hands out presigned GET URLs that last 300 seconds by default and at most
+3600. Configure it with the `S3_*` variables (see `.env.example`).
