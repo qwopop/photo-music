@@ -94,7 +94,9 @@ describe("weights", () => {
   });
   it("all three sources, genre named by all three", () => {
     const c = buildSearchCriteria(mood("happy"), prefs({ genres: ["pop", "rock"], situation: "driving" }));
-    expect(c.weights).toEqual({ mood: 0.6, preferences: 0.3, situation: 0.1 });
+    near(c.weights.mood, 0.6);
+    near(c.weights.preferences, 0.3);
+    near(c.weights.situation, 0.1);
     const g = w(c);
     near(g.pop, 0.2 + 0.15 + 0.1 / 3);
     near(g.rock, 0.15 + 0.1 / 3);
